@@ -1,0 +1,1 @@
+../tests/inputs/stencil.c

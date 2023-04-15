@@ -1,0 +1,13 @@
+if BUNDLED_ISL
+    MAYBE_ISL = isl
+endif
+if BUNDLED_BARVINOK
+    MAYBE_BARVINOK = barvinok
+endif
+if BUNDLED_PET
+    MAYBE_PET = pet
+endif
+
+SUBDIRS = $(MAYBE_ISL) $(MAYBE_BARVINOK) $(MAYBE_PET) src tests
+
+ACLOCAL_AMFLAGS = -I m4
