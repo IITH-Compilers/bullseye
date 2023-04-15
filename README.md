@@ -17,7 +17,7 @@ If you are using an Ubuntu 20.04 system, you can install these dependencies by e
 ```
 sudo apt-get install llvm-dev libclang-dev libgmp3-dev libntl-dev libboost-program-options-dev libyaml-dev
 ```
-After installing all the dependencies, navigate to the Haystack folder and execute the following commands:
+After installing all the dependencies, navigate to the bullseye folder and execute the following commands:
 ```
 ./get_submodules.sh
 ./autogen.sh
