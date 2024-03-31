@@ -26,7 +26,7 @@ These commands will fetch all the submodules and initialize autotools. With thes
 First export the path of CPLEX installation and then build the project.
 ```
 export CPLEX_HOME=path_to_CPLEX
-./configure --prefix=$HOME
+./configure --prefix=$HOME LIBS='-ldl'
 make
 make install
 ```
