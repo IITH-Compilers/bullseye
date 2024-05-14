@@ -102,10 +102,10 @@ libbullseye_la_LDFLAGS = -static
 libbullseye_la_LIBADD = $(LIB_ISL) \
                         $(LIB_BARVINOK) \
                         $(LIB_PET) \
-                        $(CPLEX_HOME)cplex/lib/x86-64_linux/static_pic/libcplex.a \
-                        $(CPLEX_HOME)cplex/lib/x86-64_linux/static_pic/libilocplex.a \
-                        $(CPLEX_HOME)concert/lib/x86-64_linux/static_pic/libconcert.a \
-                        $(CPLEX_HOME)opl/lib/x86-64_linux/static_pic/libilocplex.a \
+                        $(CPLEX_HOME)/cplex/lib/x86-64_linux/static_pic/libcplex.a \
+                        $(CPLEX_HOME)/cplex/lib/x86-64_linux/static_pic/libilocplex.a \
+                        $(CPLEX_HOME)/concert/lib/x86-64_linux/static_pic/libconcert.a \
+                        $(CPLEX_HOME)/opl/lib/x86-64_linux/static_pic/libilocplex.a \
                         $(CPLEX_HOME)/opl/lib/x86-64_linux/static_pic/libconcert.a \
                         $(AM_LDFLAGS)
 
@@ -115,7 +115,15 @@ bullseye_DEPENDENCIES = libbullseye.la
 bullseye_SOURCES = src/main.cpp libbullseye.la
 bullseye_CPPFLAGS = $(AM_CPPFLAGS) $(BOOST_CPPFLAGS)
 bullseye_LDFLAGS = -static $(BOOST_LDFLAGS) $(BOOST_PROGRAM_OPTIONS_LIB) 
-bullseye_LDADD = libbullseye.la $(LIB_ISL) $(LIB_BARVINOK) $(LIB_PET) $(CPLEX_HOME)cplex/lib/x86-64_linux/static_pic/libcplex.a $(CPLEX_HOME)cplex/lib/x86-64_linux/static_pic/libilocplex.a $(CPLEX_HOME)concert/lib/x86-64_linux/static_pic/libconcert.a $(CPLEX_HOME)opl/lib/x86-64_linux/static_pic/libilocplex.a $(CPLEX_HOME)/opl/lib/x86-64_linux/static_pic/libconcert.a 
+bullseye_LDADD = libbullseye.la \
+                 $(LIB_ISL) \
+                 $(LIB_BARVINOK) \
+                 $(LIB_PET) \
+                 $(CPLEX_HOME)/cplex/lib/x86-64_linux/static_pic/libcplex.a \
+                 $(CPLEX_HOME)/cplex/lib/x86-64_linux/static_pic/libilocplex.a \
+                 $(CPLEX_HOME)/concert/lib/x86-64_linux/static_pic/libconcert.a \
+                 $(CPLEX_HOME)/opl/lib/x86-64_linux/static_pic/libilocplex.a \
+                 $(CPLEX_HOME)/opl/lib/x86-64_linux/static_pic/libconcert.a 
 
 
 libbullseye_ladir = $(includedir)/bullseye
