@@ -50,3 +50,16 @@ m4/lt~obsolete.m4
 # can automatically generate from config.status script
 # (which is called by configure script))
 Makefile
+
+# ignore vscode settings
+.vscode/
+*/.vscode/
+
+# ignore static and dynamic libraries
+*.a
+*.la
+*.lo
+*.o
+*.so
+
+
