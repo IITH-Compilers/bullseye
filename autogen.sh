@@ -1,5 +1,5 @@
 #!/bin/sh
-autoreconf -i
+autoreconf -if
 if test -f isl/autogen.sh; then
     (cd isl; ./autogen.sh)
 fi
