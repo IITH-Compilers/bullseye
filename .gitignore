@@ -62,4 +62,10 @@ Makefile
 *.o
 *.so
 
+# ignore the executable
+/bullseye
+
+# ignore libtool and .libs
+/libtool
+.libs
 
