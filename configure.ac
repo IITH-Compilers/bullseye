@@ -1,3 +1,5 @@
+AC_PREREQ([2.69])
+
 AC_INIT([bullseye], 1.0)
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_MACRO_DIR([m4])
@@ -5,13 +7,19 @@ AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
 m4_ifdef([AM_SILENT_RULES],[AM_SILENT_RULES([yes])])
 
 # make static linking the default
-# AM_ENABLE_STATIC
-# AM_DISABLE_SHARED
+AM_ENABLE_STATIC
+AM_DISABLE_SHARED
+AC_ENABLE_STATIC
+AC_DISABLE_SHARED
 
+AC_PROG_CC
 AC_PROG_CXX
 AM_PROG_AR
-#LT_INIT([static]) # works only if static libraries are available
-LT_INIT([disable-shared])
+
+
+#LT_INIT
+LT_INIT([static],[disable-shared]) # works only if static libraries are available
+#LT_INIT([disable-shared])
 
 AX_BOOST_BASE([1.60.0])
 AX_BOOST_PROGRAM_OPTIONS
@@ -37,26 +45,28 @@ AC_SUBST(ISL_CFLAGS)
 AC_SUBST(ISL_LIBS)
 AC_SUBST(ISL_SRCDIR)
 AC_SUBST(ISL_BUILDDIR)
-case "$with_isl" in
-bundled)
+AS_CASE([$with_isl] ,
+[bundled],[
 	ISL_CFLAGS="-I\$(top_srcdir)/isl/include -I\$(top_builddir)/isl/include"
 	ISL_CFLAGS="$ISL_CFLAGS"
 	ISL_SRCDIR="$srcdir/isl"
 	ISL_BUILDDIR=isl
 	bv_configure_args="$bv_configure_args --with-isl-builddir=../isl"
 	PACKAGE_CFLAGS_ISL='-I${prefix}/include'
-	;;
-build)
+	],
+[build],[
 	ISL_SRCDIR="$isl_srcdir"
 	ISL_BUILDDIR=`echo @abs_builddir@ | $with_isl_builddir/config.status --file=-`
 	ISL_CFLAGS="-I$isl_srcdir/include -I$ISL_BUILDDIR/include"
 	ISL_LIBS="$with_isl_builddir/libisl.la"
 	PACKAGE_CFLAGS_ISL='-I${prefix}/include'
-	;;
-system)
+	],
+[system],[
 	PKG_CHECK_MODULES([ISL], [isl])
 	PACKAGE_CFLAGS_ISL="$ISL_CFLAGS"
-esac
+	]
+)
+
 AM_CONDITIONAL(HAVE_ISL_BUILDDIR, test "x$ISL_BUILDDIR" != "x")
 
 AX_SUBMODULE(barvinok,build|bundled|system,bundled)
@@ -67,48 +77,49 @@ AC_SUBST(BARVINOK_CFLAGS)
 AC_SUBST(BARVINOK_LIBS)
 AC_SUBST(BARVINOK_SRCDIR)
 AC_SUBST(BARVINOK_BUILDDIR)
-case "$with_barvinok" in
-bundled)
+
+AS_CASE([$with_barvinok],
+[bundled], [
 	BARVINOK_CFLAGS="-I\$(top_srcdir)/barvinok -I\$(top_builddir)/barvinok"
 	BARVINOK_CFLAGS="$BARVINOK_CFLAGS"
 	BARVINOK_SRCDIR="$srcdir/barvinok"
 	BARVINOK_BUILDDIR=barvinok
-	;;
-build)
+	],
+[build], [
 	BARVINOK_SRCDIR="$barvinok_srcdir"
 	BARVINOK_CFLAGS="$BARVINOK_CFLAGS"
 	BARVINOK_BUILDDIR=`echo @abs_builddir@ | $with_BARVINOK_builddir/config.status --file=-`
 	BARVINOK_CFLAGS="-I$barvinok_srcdir/ -I$BARVINOK_BUILDDIR/"
 	BARVINOK_LIBS="$with_barvinok_builddir/libisl.la"
-	;;
-system)
+	],
+[system], [
 	PKG_CHECK_MODULES([BARVINOK], [barvinok])
 	PACKAGE_CFLAGS_BARVINOK="$BARVINOK_CFLAGS"
-esac
+	]
+)
+
 AM_CONDITIONAL(HAVE_BARVINOK_BUILDDIR, test "x$BARVINOK_BUILDDIR" != "x")
 
 AX_SUBMODULE(pet,bundled|build|system,bundled)
 AC_SUBST(PET_CFLAGS)
 AC_SUBST(PET_LIBS)
 AC_SUBST(PET_BUILDDIR)
-case "$with_pet" in
-bundled)
+
+AS_CASE([$with_pet],
+[bundled], [
 	PET_CFLAGS="-I\$(top_srcdir)/pet/include"
-	;;
-build)
+],
+[build], [
 	PET_BUILDDIR=`echo @abs_builddir@ | $with_pet_builddir/config.status --file=-`
 	PET_CFLAGS="-I$pet_srcdir/include"
-	;;
-system)
+	],
+[system], [
 	PKG_CHECK_MODULES([PET], [pet])
 	PACKAGE_CFLAGS_PET="$PET_CFLAGS"
-	;;
-esac
+	]
+)
 AM_CONDITIONAL(BUNDLED_PET, test $with_pet = bundled)
 AM_CONDITIONAL(BUILD_PET, test $with_pet = build)
-
-
-
 
 # PACKAGE_CFLAGS="$PACKAGE_CFLAGS_ISL $PACKAGE_CFLAGS_BARVINOK $PACKAGE_CFLAGS_PET"
 # PACKAGE_LIBS="-lisl -lbarvinok -lpet"
@@ -123,17 +134,26 @@ AC_CONFIG_LINKS([tests/stencil.c:tests/inputs/stencil.c])
 AC_CONFIG_LINKS([tests/toy.c:tests/inputs/toy.c])
 
 AC_CONFIG_HEADERS(config.h)
-AC_CONFIG_FILES(Makefile src/Makefile tests/Makefile)
-if test $with_isl = bundled; then
-	AC_CONFIG_SUBDIRS(isl)
-fi
-if test $with_barvinok = bundled; then
-	AC_CONFIG_SUBDIRS(barvinok)
-fi
-if test $with_pet = bundled; then
-	AC_CONFIG_SUBDIRS(pet)
-fi
-AC_CONFIG_COMMANDS_POST([
-	ac_configure_args="$ac_configure_args $bv_configure_args"
-])
+AC_CONFIG_FILES(Makefile tests/Makefile)
+
+AS_IF([test $with_isl = bundled],[AC_CONFIG_SUBDIRS(isl)])
+AS_IF([test $with_barvinok = bundled],[AC_CONFIG_SUBDIRS(barvinok)])
+AS_IF([test $with_pet = bundled],[AC_CONFIG_SUBDIRS(pet)])
+AC_CONFIG_SUBDIRS(tests)
 AC_OUTPUT
+
+echo " /*-----------------------------------------------*"
+echo "  *           Bullseye configuration is OK        *"
+echo "  *-----------------------------------------------*/"
+
+echo "cpp flags in initial flags in CPPFLAGS : $CPPFLAGS"
+echo "cpp flags in initial flags in CPLEX_HOME : $CPLEX_HOME"
+echo "cpp flags in initial flags in LDFLAGS : $LDFLAGS"
+echo "cpp flags in initial flags in ISL_CFLAGS : $ISL_CFLAGS"
+echo "cpp flags in initial flags in ISL_LIBS : $ISL_LIBS"
+echo "cpp flags in initial flags in BARVINOK_CFLAGS : $BARVINOK_CFLAGS"
+echo "cpp flags in initial flags in BARVINOK_LIBS : $BARVINOK_LIBS"
+echo "cpp flags in initial flags in PET_CFLAGS : $PET_CFLAGS"
+echo "cpp flags in initial flags in PET_LIBS : $PET_LIBS"
+echo "cpp flags in initial flags in ac_configure_args : $ac_configure_args"
+
