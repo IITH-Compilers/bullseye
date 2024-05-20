@@ -131,7 +131,9 @@ include_HEADERS = $(libbullseye_la_HEADERS)
 
 
 
-
+install-data-hook:
+	mkdir -p $(includedir)/isl
+	cp $(srcdir)/isl/isl-noexceptions.h $(includedir)/isl/isl-noexceptions.h
 
 
 
