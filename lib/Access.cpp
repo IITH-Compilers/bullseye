@@ -3,31 +3,31 @@
    Adopted from HayStack (PLDI 2019)
  */
 
+#include "Access.h"
+#include "BullsEye.h"
+#include "Timer.h"
+#include "barvinok/isl.h"
+#include "isl-helpers.h"
+#include "op.h"
+#include <algorithm>
+#include <boost/math/common_factor.hpp>
+#include <cassert>
+#include <chrono>
 #include <cmath>
-#include <string>
+#include <ilcplex/ilocplex.h>
 #include <iostream>
 #include <isl/vertices.h>
-#include <ilcplex/ilocplex.h>
-#include <boost/math/common_factor.hpp>
-#include <iostream>
-#include <algorithm>
-#include <cassert>
 #include <limits>
 #include <list>
 #include <map>
 #include <numeric>
-#include <set>
 #include <regex>
+#include <set>
+#include <string>
 #include <vector>
-#include <chrono>
-#include "Access.h"
-#include "Timer.h" 
-#include "barvinok/isl.h"
-#include "isl-helpers.h"
-#include "BullsEye.h"
-#include "op.h"
 
-void Access::initAccess(std::vector<NamedLong> ParameterValues, isl::set Parameters) {
+void Access::initAccess(std::vector<NamedLong> ParameterValues,
+                        isl::set Parameters) {
   // set the parametes
   ParameterValues_ = ParameterValues;
   Parameters_ = Parameters;
@@ -80,9 +80,11 @@ void Access::computeStackDistances(isl::union_map BetweenMap) {
     if (ModelOptions_.ComputeBounds) {
       // compute the set of obvious cache misses
       Timer::startTimer("ComputeBounds");
-      long Limit = *std::max_element(MachineModel_.CacheSizes.begin(), MachineModel_.CacheSizes.end());
+      long Limit = *std::max_element(MachineModel_.CacheSizes.begin(),
+                                     MachineModel_.CacheSizes.end());
       Limit /= MachineModel_.CacheLineSize;
-      isl::union_set Misses = BetweenMap.domain().empty(BetweenMap.domain().get_space());
+      isl::union_set Misses =
+          BetweenMap.domain().empty(BetweenMap.domain().get_space());
       isl::union_set Domain = BetweenMap.domain();
       // compute number of maps
       auto countMap = [&](isl::map Map) {
@@ -94,8 +96,10 @@ void Access::computeStackDistances(isl::union_map BetweenMap) {
             auto Norm = Map.sum(Map.lexmin().neg());
             long UpperBound = isl::cardinality(Norm.range());
             if (UpperBound > Limit) {
-              auto Complement = Norm.complement().intersect_domain(Map.domain());
-              long LowerBound = isl::cardinality(Complement.range().complement().intersect(Norm.range()));
+              auto Complement =
+                  Norm.complement().intersect_domain(Map.domain());
+              long LowerBound = isl::cardinality(
+                  Complement.range().complement().intersect(Norm.range()));
               if (LowerBound > Limit) {
                 Misses = Misses.unite(BasicMap.domain());
                 Domain = Domain.subtract(BasicMap.domain());
@@ -108,7 +112,8 @@ void Access::computeStackDistances(isl::union_map BetweenMap) {
         return isl::stat::ok();
       };
       BetweenMap.foreach_map(countMap);
-      // count the domains with stack distance bound larger than the maximal cache size
+      // count the domains with stack distance bound larger than the maximal
+      // cache size
       if (!Misses.is_empty()) {
         // count the misses
         auto countMisses = [&](isl::set Set) {
@@ -123,10 +128,12 @@ void Access::computeStackDistances(isl::union_map BetweenMap) {
       }
       Timer::stopTimer("ComputeBounds");
     }
-    // compute the stack distance for the remaining points of the iteration domain
+    // compute the stack distance for the remaining points of the iteration
+    // domain
     Timer::startTimer("CountBetweenMap");
     Expression_.clear();
-    auto Count = isl::manage(isl_union_map_card(isl::union_map(BetweenMap).release()));
+    auto Count =
+        isl::manage(isl_union_map_card(isl::union_map(BetweenMap).release()));
     Count = Count.intersect_domain(BetweenMap.domain());
     auto countMapDomain = [&](isl::set Set) {
       Result_.Counted += isl::cardinality(Set);
@@ -162,17 +169,19 @@ void Access::computeStackDistances(isl::union_map BetweenMap) {
 
 void Access::countCapacityMisses() {
   // compute the capacity misses for the machine
-  Result_.CapacityMisses = countCapacityMisses(MachineModel_.CacheSizes); 
+  Result_.CapacityMisses = countCapacityMisses(MachineModel_.CacheSizes);
 }
 
-std::vector<long> Access::countCapacityMisses(std::vector<long> CacheSizes) { 
+std::vector<long> Access::countCapacityMisses(std::vector<long> CacheSizes) {
   Timer::startTimer("CountCapacityMisses");
   if (ModelOptions_.ComputeBounds) {
-    // verify the cache sizes do not exceed the maximum cache size of the machine
-    // (the bounds were computed for the maximal cache size)
-    if (*std::max_element(MachineModel_.CacheSizes.begin(), MachineModel_.CacheSizes.end()) <
+    // verify the cache sizes do not exceed the maximum cache size of the
+    // machine (the bounds were computed for the maximal cache size)
+    if (*std::max_element(MachineModel_.CacheSizes.begin(),
+                          MachineModel_.CacheSizes.end()) <
         *std::max_element(CacheSizes.begin(), CacheSizes.end())) {
-      printf("-> exit(-1) cache size exceeds maximum cache size of the machine\n");
+      printf(
+          "-> exit(-1) cache size exceeds maximum cache size of the machine\n");
       exit(-1);
     }
   }
@@ -186,26 +195,31 @@ std::vector<long> Access::countCapacityMisses(std::vector<long> CacheSizes) {
   // compute the cache misses for the constant domains
   for (auto &Domain : Constant_) {
     for (int i = 0; i < Limits.size(); ++i) {
-      Results[i] += Domain.second.gt(isl::val(Domain.second.get_ctx(), Limits[i])) ? Domain.first : 0;
+      Results[i] +=
+          Domain.second.gt(isl::val(Domain.second.get_ctx(), Limits[i]))
+              ? Domain.first
+              : 0;
     }
   }
-  // compute the cache misses for the affine pieces 
+  // compute the cache misses for the affine pieces
   for (auto &Piece : Affine_) {
     // affine_pieces++;
     auto Misses = countAffineDimensions(Piece, Limits);
-    std::transform(Results.begin(), Results.end(), Misses.begin(), Results.begin(), std::plus<long>());
+    std::transform(Results.begin(), Results.end(), Misses.begin(),
+                   Results.begin(), std::plus<long>());
   }
-  // compute the cache misses for the non-affine pieces 
-  for (auto &Piece : NonAffine_) { 
-    NonAffine_approx_.push_back(Piece); 
+  // compute the cache misses for the non-affine pieces
+  for (auto &Piece : NonAffine_) {
+    NonAffine_approx_.push_back(Piece);
   }
- 
-  for(auto &Piece : NonAffine_approx_) { 
 
-      auto misses_total = BullsEye::calculateApproximateCapacityMisses(Piece, Affine_dims, NonAffine_dims, Limits); 
-      std::transform(Results.begin(), Results.end(), misses_total.begin(), Results.begin(), std::plus<long>());
-      
-  } 
+  for (auto &Piece : NonAffine_approx_) {
+
+    auto misses_total = BullsEye::calculateApproximateCapacityMisses(
+        Piece, Affine_dims, NonAffine_dims, Limits);
+    std::transform(Results.begin(), Results.end(), misses_total.begin(),
+                   Results.begin(), std::plus<long>());
+  }
 
   Timer::stopTimer("CountCapacityMisses");
   return Results;
@@ -225,9 +239,10 @@ void Access::storeAffinePieces() {
   std::swap(Expression_, NonAffine);
 }
 
-std::vector<long> Access::enumerateNonAffinePoints(piece Piece, std::vector<long> Limits) const {
+std::vector<long>
+Access::enumerateNonAffinePoints(piece Piece, std::vector<long> Limits) const {
   Timer::startTimer("enumerateNonAffinePoints");
-  
+
   long All = getPieceSize(Piece);
   auto start_count = std::chrono::high_resolution_clock::now();
   std::vector<long> Results(Limits.size(), 0);
@@ -240,13 +255,15 @@ std::vector<long> Access::enumerateNonAffinePoints(piece Piece, std::vector<long
     return isl::stat::ok();
   };
   Piece.Domain.foreach_point(countMisses);
-  auto stop_count  = std::chrono::high_resolution_clock::now();
-  auto duration_count = std::chrono::duration_cast<std::chrono::milliseconds>(stop_count-start_count);
+  auto stop_count = std::chrono::high_resolution_clock::now();
+  auto duration_count = std::chrono::duration_cast<std::chrono::milliseconds>(
+      stop_count - start_count);
   Timer::stopTimer("enumerateNonAffinePoints");
   return Results;
 }
 
-std::vector<long> Access::countAffineDimensions(piece Piece, std::vector<long> Limits) const {
+std::vector<long>
+Access::countAffineDimensions(piece Piece, std::vector<long> Limits) const {
   Timer::startTimer("countAffineDimensions");
   std::vector<long> Results(Limits.size());
   isl::pw_aff LHS = Piece.Expression;
@@ -284,7 +301,8 @@ std::vector<int> Access::findNonAffineDimensions(piece Piece) const {
         isl::aff Divisor = Term.get_div(i);
         // extract the parameter and variable information
         for (int j = 0; j < Divisor.dim(isl::dim::param); ++j) {
-          isl::val Coefficient = Divisor.get_coefficient_val(isl::dim::param, j);
+          isl::val Coefficient =
+              Divisor.get_coefficient_val(isl::dim::param, j);
           if (!Coefficient.is_zero())
             Parameters[j] += Term.get_exp(isl::dim::div, i);
         }
@@ -385,7 +403,7 @@ void Access::enumerateNonAffineDimensions(piece Piece) {
       NonAffine_.push_back(Piece);
     } else {
       // compute the piecewise polynomial
-      NonAffine_approx_.push_back(Piece); 
+      NonAffine_approx_.push_back(Piece);
       Affine_dims = Affine;
     }
   }
@@ -401,8 +419,8 @@ void Access::applyEqualization() {
     // try to eliminate non affine terms
     std::vector<piece> Pieces = {Piece};
     while (!Pieces.empty()) {
-      // compute possible candidates and select the one with the highest exponent
-      // (doe not split polynoms with a single divisor term)
+      // compute possible candidates and select the one with the highest
+      // exponent (doe not split polynoms with a single divisor term)
       auto Candidates = findEqualizationCandidates(Pieces.back());
       std::vector<std::vector<long>> Splits;
       std::vector<int> Indexes;
@@ -412,14 +430,17 @@ void Access::applyEqualization() {
       for (int i = 0; i < Candidates.size(); ++i) {
         Indexes.push_back(i);
       }
-      std::sort(Indexes.begin(), Indexes.end(), [&](int I1, int I2) { return Splits[I1].size() < Splits[I2].size(); });
+      std::sort(Indexes.begin(), Indexes.end(), [&](int I1, int I2) {
+        return Splits[I1].size() < Splits[I2].size();
+      });
       // classify the updates
       std::vector<piece> Done;
       std::vector<piece> Empty;
       std::vector<piece> Improved;
       // try to eliminate all the candidates and stop on success
       for (auto Index : Indexes) {
-        std::vector<piece> Updates = equalizeCandidate(Candidates[Index], Splits[Index], Pieces.back());
+        std::vector<piece> Updates =
+            equalizeCandidate(Candidates[Index], Splits[Index], Pieces.back());
         // store updates if the exponent improves
         if (!Updates.empty()) {
           for (auto Update : Updates) {
@@ -478,7 +499,9 @@ void Access::applyRasterization() {
     for (int i = 0; i < Dimensions.size(); ++i) {
       Indexes.push_back(i);
     }
-    std::sort(Indexes.begin(), Indexes.end(), [&](int I1, int I2) { return Multipliers[I1].lt(Multipliers[I2]); });
+    std::sort(Indexes.begin(), Indexes.end(), [&](int I1, int I2) {
+      return Multipliers[I1].lt(Multipliers[I2]);
+    });
     // compute the domain size
     long All = getPieceSize(Piece);
     // raster the pieces dimension by dimension
@@ -494,7 +517,8 @@ void Access::applyRasterization() {
       Next.clear();
       bool IsSuccess = true;
       for (auto Piece : Current) {
-        std::vector<piece> Updates = rasterDimension(Dimensions[Index], Multipliers[Index], Piece);
+        std::vector<piece> Updates =
+            rasterDimension(Dimensions[Index], Multipliers[Index], Piece);
         if (Updates.empty()) {
           IsSuccess = false;
           break;
@@ -557,7 +581,8 @@ int Access::computeDimensionExponent(int Dimension, piece Piece) const {
     for (int i = 0; i < Term.dim(isl::dim::div); i++) {
       if (Term.get_exp(isl::dim::div, i) > 0) {
         isl::aff Divisor = Term.get_div(i);
-        if (Dimension < Divisor.dim(isl::dim::in) && !Divisor.get_coefficient_val(isl::dim::in, Dimension).is_zero())
+        if (Dimension < Divisor.dim(isl::dim::in) &&
+            !Divisor.get_coefficient_val(isl::dim::in, Dimension).is_zero())
           Exponent += Term.get_exp(isl::dim::div, i);
       }
     }
@@ -568,7 +593,9 @@ int Access::computeDimensionExponent(int Dimension, piece Piece) const {
   return Result;
 }
 
-isl::qpolynomial Access::computeReplacement(std::map<int, isl::qpolynomial> Replacements, piece Piece) const {
+isl::qpolynomial
+Access::computeReplacement(std::map<int, isl::qpolynomial> Replacements,
+                           piece Piece) const {
   isl::space Space = Piece.Polynomial.get_domain_space();
   isl::qpolynomial Polynomial = isl::qpolynomial::zero_on_domain(Space);
   auto updatePolynomial = [&](isl::term Term) {
@@ -580,16 +607,21 @@ isl::qpolynomial Access::computeReplacement(std::map<int, isl::qpolynomial> Repl
     // compute replacement term
     if (Replace) {
       // compute the update term
-      isl::qpolynomial Update = isl::qpolynomial::val_on_domain(Space, Term.get_coefficient_val());
+      isl::qpolynomial Update =
+          isl::qpolynomial::val_on_domain(Space, Term.get_coefficient_val());
       // multiply with the parameters
       for (int i = 0; i < Term.dim(isl::dim::param); ++i) {
         int Exponent = Term.get_exp(isl::dim::param, i);
-        Update = Update.mul(isl::qpolynomial::var_on_domain(Space, isl::dim::param, i).pow(Exponent));
+        Update = Update.mul(
+            isl::qpolynomial::var_on_domain(Space, isl::dim::param, i)
+                .pow(Exponent));
       }
       // multiply with variables
       for (int i = 0; i < Term.dim(isl::dim::set); ++i) {
         int Exponent = Term.get_exp(isl::dim::set, i);
-        Update = Update.mul(isl::qpolynomial::var_on_domain(Space, isl::dim::set, i).pow(Exponent));
+        Update =
+            Update.mul(isl::qpolynomial::var_on_domain(Space, isl::dim::set, i)
+                           .pow(Exponent));
       }
       // compute the divisors
       for (int i = 0; i < Term.dim(isl::dim::div); ++i) {
@@ -598,7 +630,9 @@ isl::qpolynomial Access::computeReplacement(std::map<int, isl::qpolynomial> Repl
           if (Replacements.count(i) == 1) {
             Update = Update.mul(Replacements[i].pow(Exponent));
           } else
-            Update = Update.mul(isl::qpolynomial::from_aff(Term.get_div(i).floor()).pow(Exponent));
+            Update =
+                Update.mul(isl::qpolynomial::from_aff(Term.get_div(i).floor())
+                               .pow(Exponent));
         }
       }
       // update the polynomial
@@ -635,7 +669,8 @@ std::vector<int> Access::findRasterDimensions(piece Piece) const {
         isl::aff Divisor = Term.get_div(i);
         // extract the parameter and variable information
         for (int j = 0; j < Divisor.dim(isl::dim::param); ++j) {
-          isl::val Coefficient = Divisor.get_coefficient_val(isl::dim::param, j);
+          isl::val Coefficient =
+              Divisor.get_coefficient_val(isl::dim::param, j);
           if (!Coefficient.is_zero())
             Parameters += Term.get_exp(isl::dim::div, i);
         }
@@ -669,11 +704,13 @@ std::vector<int> Access::findRasterDimensions(piece Piece) const {
   }
   // make dimensions unique
   std::sort(Dimensions.begin(), Dimensions.end());
-  Dimensions.erase(std::unique(Dimensions.begin(), Dimensions.end()), Dimensions.end());
+  Dimensions.erase(std::unique(Dimensions.begin(), Dimensions.end()),
+                   Dimensions.end());
   return Dimensions;
 }
 
-std::vector<isl::val> Access::computeMultipliers(std::vector<int> Dimensions, piece Piece) const {
+std::vector<isl::val> Access::computeMultipliers(std::vector<int> Dimensions,
+                                                 piece Piece) const {
   // compute the least common multipliers for all dimensions
   std::vector<long> LCM(Piece.Polynomial.dim(isl::dim::in), 1);
   // process every divisor exactly once
@@ -695,9 +732,11 @@ std::vector<isl::val> Access::computeMultipliers(std::vector<int> Dimensions, pi
         // compute the multipliers for all variables of the term
         for (auto Dimension : Dimensions) {
           if (Variables.count(Dimension) == 1) {
-            long Coefficient = isl::get_value(Variables[Dimension].mul(Divisor.get_denominator_val()));
+            long Coefficient = isl::get_value(
+                Variables[Dimension].mul(Divisor.get_denominator_val()));
             long Denominator = isl::get_value(Divisor.get_denominator_val());
-            Denominator = Denominator / boost::math::gcd(Coefficient, Denominator);
+            Denominator =
+                Denominator / boost::math::gcd(Coefficient, Denominator);
             LCM[Dimension] = boost::math::lcm(LCM[Dimension], Denominator);
           }
         }
@@ -714,7 +753,8 @@ std::vector<isl::val> Access::computeMultipliers(std::vector<int> Dimensions, pi
   return Multipliers;
 }
 
-std::vector<piece> Access::rasterDimension(int Dimension, isl::val Multiplier, piece Piece) const {
+std::vector<piece> Access::rasterDimension(int Dimension, isl::val Multiplier,
+                                           piece Piece) const {
   isl::local_space DS = isl::local_space(Piece.Domain.get_space());
   isl::local_space PS = isl::local_space(Piece.Polynomial.get_domain_space());
   // result vector
@@ -723,8 +763,10 @@ std::vector<piece> Access::rasterDimension(int Dimension, isl::val Multiplier, p
   for (int Current = 0; Current < isl::get_value(Multiplier); ++Current) {
     // compute the domain
     isl::set Domain = Piece.Domain;
-    isl::pw_aff Modulo = isl::pw_aff::var_on_domain(DS, isl::dim::set, Dimension) % Multiplier;
-    isl::set Element = Modulo.eq_set(isl::aff(DS, isl::val(Domain.get_ctx(), Current)));
+    isl::pw_aff Modulo =
+        isl::pw_aff::var_on_domain(DS, isl::dim::set, Dimension) % Multiplier;
+    isl::set Element =
+        Modulo.eq_set(isl::aff(DS, isl::val(Domain.get_ctx(), Current)));
     Domain = Domain.intersect(Element);
     // compute the polynomial
     isl::qpolynomial Polynomial;
@@ -744,12 +786,14 @@ std::vector<piece> Access::rasterDimension(int Dimension, isl::val Multiplier, p
             std::vector<isl::val> Coefficients;
             // extract the parameter and variable information
             for (int j = 0; j < Divisor.dim(isl::dim::param); ++j) {
-              isl::val Coefficient = Divisor.get_coefficient_val(isl::dim::param, j);
+              isl::val Coefficient =
+                  Divisor.get_coefficient_val(isl::dim::param, j);
               if (!Coefficient.is_zero())
                 Parameters++;
             }
             for (int j = 0; j < Divisor.dim(isl::dim::in); ++j) {
-              isl::val Coefficient = Divisor.get_coefficient_val(isl::dim::in, j);
+              isl::val Coefficient =
+                  Divisor.get_coefficient_val(isl::dim::in, j);
               if (!Coefficient.is_zero()) {
                 Variables.push_back(j);
                 Coefficients.push_back(Coefficient);
@@ -757,25 +801,31 @@ std::vector<piece> Access::rasterDimension(int Dimension, isl::val Multiplier, p
             }
             // search the dimension
             int Index = -1;
-            auto Iter = std::find(Variables.begin(), Variables.end(), Dimension);
+            auto Iter =
+                std::find(Variables.begin(), Variables.end(), Dimension);
             if (Iter != Variables.end())
               Index = std::distance(Variables.begin(), Iter);
             // replace the divisor if the variable matches
             if (Parameters == 0 && Index >= 0) {
               // compute the replacement
-              isl::aff Remainder = isl::aff(PS, isl::val(Domain.get_ctx(), Current));
+              isl::aff Remainder =
+                  isl::aff(PS, isl::val(Domain.get_ctx(), Current));
               isl::aff New = isl::aff(PS, Divisor.get_constant_val());
               // add all other variables
               for (int j = 0; j < Variables.size(); ++j) {
                 if (j != Index) {
-                  isl::aff Var = isl::aff::var_on_domain(PS, isl::dim::set, Variables[j]);
+                  isl::aff Var =
+                      isl::aff::var_on_domain(PS, isl::dim::set, Variables[j]);
                   New = New.add(isl::aff(PS, Coefficients[j]).mul(Var));
                 }
               }
               // add the remainder and compute the floor
-              New = New.add(isl::aff(PS, Coefficients[Index]).mul(Remainder)).floor();
+              New = New.add(isl::aff(PS, Coefficients[Index]).mul(Remainder))
+                        .floor();
               // add the division outside of the floor
-              isl::aff Var = isl::aff::var_on_domain(PS, isl::dim::set, Variables[Index]).sub(Remainder);
+              isl::aff Var =
+                  isl::aff::var_on_domain(PS, isl::dim::set, Variables[Index])
+                      .sub(Remainder);
               New = New.add(isl::aff(PS, Coefficients[Index]).mul(Var));
               Replacements[i] = isl::qpolynomial::from_aff(New);
             }
@@ -808,7 +858,8 @@ std::vector<piece> Access::rasterDimension(int Dimension, isl::val Multiplier, p
   return Pieces;
 }
 
-std::vector<std::vector<std::tuple<int, long, long>>> Access::findEqualizationCandidates(piece Piece) const {
+std::vector<std::vector<std::tuple<int, long, long>>>
+Access::findEqualizationCandidates(piece Piece) const {
   // count the number of divisors that differ only by constant
   std::map<std::vector<std::tuple<int, long, long>>, int> Counts;
   std::vector<std::vector<std::tuple<int, long, long>>> Candidates;
@@ -826,7 +877,8 @@ std::vector<std::vector<std::tuple<int, long, long>>> Access::findEqualizationCa
         isl::val Denominator = Divisor.get_denominator_val();
         // extract the parameter and variable information
         for (int j = 0; j < Divisor.dim(isl::dim::param); ++j) {
-          isl::val Coefficient = Divisor.get_coefficient_val(isl::dim::param, j);
+          isl::val Coefficient =
+              Divisor.get_coefficient_val(isl::dim::param, j);
           if (!Coefficient.is_zero())
             Parameters++;
         }
@@ -834,7 +886,8 @@ std::vector<std::vector<std::tuple<int, long, long>>> Access::findEqualizationCa
           isl::val Coefficient = Divisor.get_coefficient_val(isl::dim::in, j);
           if (!Coefficient.is_zero())
             Variables.push_back(
-                std::make_tuple(j, isl::get_value(Coefficient.mul(Denominator)), isl::get_value(Denominator)));
+                std::make_tuple(j, isl::get_value(Coefficient.mul(Denominator)),
+                                isl::get_value(Denominator)));
         }
         // count the single variate divisors with coefficient one
         if (Parameters == 0) {
@@ -854,7 +907,9 @@ std::vector<std::vector<std::tuple<int, long, long>>> Access::findEqualizationCa
   return Candidates;
 }
 
-std::vector<long> Access::computeSplits(std::vector<std::tuple<int, long, long>> Candidate, piece Piece) const {
+std::vector<long>
+Access::computeSplits(std::vector<std::tuple<int, long, long>> Candidate,
+                      piece Piece) const {
   // compute the splits for the candidate variable
   std::vector<long> Splits;
   std::set<int> Divisors;
@@ -870,7 +925,8 @@ std::vector<long> Access::computeSplits(std::vector<std::tuple<int, long, long>>
         isl::val Denominator = Divisor.get_denominator_val();
         // extract the parameter and variable information
         for (int j = 0; j < Divisor.dim(isl::dim::param); ++j) {
-          isl::val Coefficient = Divisor.get_coefficient_val(isl::dim::param, j);
+          isl::val Coefficient =
+              Divisor.get_coefficient_val(isl::dim::param, j);
           if (!Coefficient.is_zero())
             Parameters++;
         }
@@ -886,7 +942,8 @@ std::vector<long> Access::computeSplits(std::vector<std::tuple<int, long, long>>
           bool IsMatch = true;
           for (int i = 0; i < Variables.size(); ++i) {
             if (Variables[i] != std::get<0>(Candidate[i]) ||
-                isl::get_value(Coefficients[i].mul(Denominator)) != std::get<1>(Candidate[i]) ||
+                isl::get_value(Coefficients[i].mul(Denominator)) !=
+                    std::get<1>(Candidate[i]) ||
                 isl::get_value(Denominator) != std::get<2>(Candidate[i])) {
               IsMatch = false;
               break;
@@ -895,7 +952,8 @@ std::vector<long> Access::computeSplits(std::vector<std::tuple<int, long, long>>
           // if all variables match compute the splits
           if (IsMatch) {
             isl::val Constant = Divisor.get_constant_val().mul(Denominator);
-            Splits.push_back(isl::get_value(Denominator.sub(Constant).mod(Denominator)));
+            Splits.push_back(
+                isl::get_value(Denominator.sub(Constant).mod(Denominator)));
           }
         }
       }
@@ -909,39 +967,49 @@ std::vector<long> Access::computeSplits(std::vector<std::tuple<int, long, long>>
   return Splits;
 }
 
-std::vector<piece> Access::equalizeCandidate(std::vector<std::tuple<int, long, long>> Candidate, std::vector<long> Splits, piece Piece) const {
+std::vector<piece>
+Access::equalizeCandidate(std::vector<std::tuple<int, long, long>> Candidate,
+                          std::vector<long> Splits, piece Piece) const {
   isl::local_space DS = isl::local_space(Piece.Domain.get_space());
   isl::local_space PS = isl::local_space(Piece.Polynomial.get_domain_space());
   // result vector
   std::vector<piece> Pieces;
   assert(!Splits.empty());
   // extract the candidate information
-  isl::val Denominator = isl::val(Piece.Domain.get_ctx(), std::get<2>(Candidate[0]));
+  isl::val Denominator =
+      isl::val(Piece.Domain.get_ctx(), std::get<2>(Candidate[0]));
   isl::aff Dimension = isl::aff(DS, isl::val(Piece.Domain.get_ctx(), 0));
   for (auto Variable : Candidate) {
-    Dimension = Dimension.add(isl::aff::var_on_domain(DS, isl::dim::set, std::get<0>(Variable))
-                                  .mul(isl::aff(DS, isl::val(Piece.Domain.get_ctx(), std::get<1>(Variable)))));
+    Dimension = Dimension.add(
+        isl::aff::var_on_domain(DS, isl::dim::set, std::get<0>(Variable))
+            .mul(isl::aff(
+                DS, isl::val(Piece.Domain.get_ctx(), std::get<1>(Variable)))));
   }
   // compute the equalization offset
   // (allows us to avoid split at zero)
-  isl::val Offset = isl::val(Piece.Domain.get_ctx(), -Splits[0]).mod(Denominator);
+  isl::val Offset =
+      isl::val(Piece.Domain.get_ctx(), -Splits[0]).mod(Denominator);
   // add the correction terms for each interval
   long Start = Splits.back();
   for (int i = 0; i < Splits.size(); ++i) {
     // compute the range
     long Stop = Splits[i];
-    bool Single = Stop - Start == 1 || Stop - Start == 1 - isl::get_value(Denominator);
+    bool Single =
+        Stop - Start == 1 || Stop - Start == 1 - isl::get_value(Denominator);
     // compute the domain
     isl::set Domain = Piece.Domain;
     if (Start != Stop) {
       isl::aff Modulo = Dimension.mod(Denominator);
-      isl::set LowerBound = Modulo.ge_set(isl::aff(DS, isl::val(Domain.get_ctx(), Start)));
-      isl::set UpperBound = Modulo.lt_set(isl::aff(DS, isl::val(Domain.get_ctx(), Stop)));
+      isl::set LowerBound =
+          Modulo.ge_set(isl::aff(DS, isl::val(Domain.get_ctx(), Start)));
+      isl::set UpperBound =
+          Modulo.lt_set(isl::aff(DS, isl::val(Domain.get_ctx(), Stop)));
       // handle intervals that wrap around
       if (Start < Stop) {
         Domain = Domain.intersect(LowerBound).intersect(UpperBound);
       } else {
-        Domain = Domain.intersect(LowerBound).unite(Domain.intersect(UpperBound));
+        Domain =
+            Domain.intersect(LowerBound).unite(Domain.intersect(UpperBound));
       }
     }
     // compute the polynomial if the domain is not empty
@@ -962,12 +1030,14 @@ std::vector<piece> Access::equalizeCandidate(std::vector<std::tuple<int, long, l
             isl::val Denominator = Divisor.get_denominator_val();
             // extract the parameter and variable information
             for (int j = 0; j < Divisor.dim(isl::dim::param); ++j) {
-              isl::val Coefficient = Divisor.get_coefficient_val(isl::dim::param, j);
+              isl::val Coefficient =
+                  Divisor.get_coefficient_val(isl::dim::param, j);
               if (!Coefficient.is_zero())
                 Parameters++;
             }
             for (int j = 0; j < Divisor.dim(isl::dim::in); ++j) {
-              isl::val Coefficient = Divisor.get_coefficient_val(isl::dim::in, j);
+              isl::val Coefficient =
+                  Divisor.get_coefficient_val(isl::dim::in, j);
               if (!Coefficient.is_zero()) {
                 Variables.push_back(j);
                 Coefficients.push_back(Coefficient);
@@ -978,7 +1048,8 @@ std::vector<piece> Access::equalizeCandidate(std::vector<std::tuple<int, long, l
               bool IsMatch = true;
               for (int i = 0; i < Variables.size(); ++i) {
                 if (Variables[i] != std::get<0>(Candidate[i]) ||
-                    isl::get_value(Coefficients[i].mul(Denominator)) != std::get<1>(Candidate[i]) ||
+                    isl::get_value(Coefficients[i].mul(Denominator)) !=
+                        std::get<1>(Candidate[i]) ||
                     isl::get_value(Denominator) != std::get<2>(Candidate[i])) {
                   IsMatch = false;
                   break;
@@ -993,15 +1064,17 @@ std::vector<piece> Access::equalizeCandidate(std::vector<std::tuple<int, long, l
                 // (no floor necessary if for single elements)
                 if (Single) {
                   isl::val New = Variable.add(Offset).div(Denominator);
-                  Replacements[i] = isl::qpolynomial::from_aff(Dimension.add(isl::aff(PS, Offset))
-                                                                   .div(isl::aff(PS, Denominator))
-                                                                   .add(isl::aff(PS, Old.sub(New))));
+                  Replacements[i] = isl::qpolynomial::from_aff(
+                      Dimension.add(isl::aff(PS, Offset))
+                          .div(isl::aff(PS, Denominator))
+                          .add(isl::aff(PS, Old.sub(New))));
                 } else {
                   isl::val New = Variable.add(Offset).div(Denominator).floor();
-                  Replacements[i] = isl::qpolynomial::from_aff(Dimension.add(isl::aff(PS, Offset))
-                                                                   .div(isl::aff(PS, Denominator))
-                                                                   .floor()
-                                                                   .add(isl::aff(PS, Old.sub(New))));
+                  Replacements[i] = isl::qpolynomial::from_aff(
+                      Dimension.add(isl::aff(PS, Offset))
+                          .div(isl::aff(PS, Denominator))
+                          .floor()
+                          .add(isl::aff(PS, Old.sub(New))));
                 }
               }
             }
@@ -1045,8 +1118,10 @@ std::vector<piece> Access::equalizeCandidate(std::vector<std::tuple<int, long, l
 bool Access::verifySplit(piece Piece, std::vector<piece> Updates) const {
   // sum the domain sizes of the pieces and compare the the original piece
   long All = isl::cardinality(Piece.Domain);
-  long Total = std::accumulate(Updates.begin(), Updates.end(), 0,
-                               [](long Total, piece Current) { return Total + isl::cardinality(Current.Domain); });
+  long Total = std::accumulate(
+      Updates.begin(), Updates.end(), 0, [](long Total, piece Current) {
+        return Total + isl::cardinality(Current.Domain);
+      });
   if (All != Total) {
     printf("-> domain split failed (%ld!=%ld)!\n", All, Total);
     Piece.Domain.dump();
@@ -1140,7 +1215,8 @@ void Access::extractStackDistanceExpression(isl::union_pw_qpolynomial Count) {
 
 bool Access::isPieceAffine(piece Piece) const {
   // sum the exponents the determine if the piece is affine
-  // (note that this function does not consider domains with constant dimensions)
+  // (note that this function does not consider domains with constant
+  // dimensions)
   for (auto Term : Piece.Terms) {
     // count the factors
     int Factors = 0;
@@ -1192,7 +1268,8 @@ isl::pw_aff Access::extractAffineExpression(piece Piece) const {
     for (int i = 0; i < Term.Parameters.size(); ++i) {
       if (Term.Parameters[i] > 0) {
         assert(Term.Parameters[i] <= 1);
-        isl::pw_aff Parameter = isl::pw_aff::var_on_domain(DS, isl::dim::param, i);
+        isl::pw_aff Parameter =
+            isl::pw_aff::var_on_domain(DS, isl::dim::param, i);
         Product = Product.mul(Parameter);
       }
     }
@@ -1222,7 +1299,9 @@ isl::pw_aff Access::extractAffineExpression(piece Piece) const {
   return Sum;
 }
 
-isl::aff Access::extractAffineExpression(isl::qpolynomial Polynomial, isl::set Domain, std::map<int, long> Values) const {
+isl::aff Access::extractAffineExpression(isl::qpolynomial Polynomial,
+                                         isl::set Domain,
+                                         std::map<int, long> Values) const {
   Timer::startTimer("extractAffineExpression");
   // buffer the fixed divisors
   std::map<int, isl::aff> Divisors;
@@ -1266,18 +1345,22 @@ isl::aff Access::extractAffineExpression(isl::qpolynomial Polynomial, isl::set D
           auto Divisor = Term.get_div(i);
           auto Replacement = isl::aff(DS, Divisor.get_constant_val());
           for (int j = 0; j < Divisor.dim(isl::dim::param); ++j) {
-            isl::val Coefficient = Divisor.get_coefficient_val(isl::dim::param, j);
+            isl::val Coefficient =
+                Divisor.get_coefficient_val(isl::dim::param, j);
             if (!Coefficient.is_zero()) {
-              Replacement = Replacement.add_coefficient_val(isl::dim::param, j, Coefficient);
+              Replacement = Replacement.add_coefficient_val(isl::dim::param, j,
+                                                            Coefficient);
             }
           }
           for (int j = 0; j < Divisor.dim(isl::dim::in); ++j) {
             isl::val Coefficient = Divisor.get_coefficient_val(isl::dim::in, j);
             if (!Coefficient.is_zero()) {
               if (Values.count(j)) {
-                Replacement = Replacement.add_constant_val(Coefficient.mul_ui(Values[j]));
+                Replacement =
+                    Replacement.add_constant_val(Coefficient.mul_ui(Values[j]));
               } else {
-                Replacement = Replacement.add_coefficient_val(isl::dim::in, j, Coefficient);
+                Replacement = Replacement.add_coefficient_val(isl::dim::in, j,
+                                                              Coefficient);
               }
             }
           }

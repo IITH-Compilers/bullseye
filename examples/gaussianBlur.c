@@ -5,9 +5,9 @@ Pankaj Kukreja
 github.com/proton0001
 Indian Institute of Technology Hyderabad
 */
- 
+
 #include <math.h> // For M_PI and exp
-#define HEIGHT  3840 
+#define HEIGHT 3840
 #define WIDTH 2160
 #define OFFSET 54
 #define BOX_SIZE 59
@@ -24,8 +24,8 @@ int main() {
 
   float sum = 0;
   float gaussianFilter[BOX_SIZE][BOX_SIZE] = {0};
-  
-  #pragma scop
+
+#pragma scop
   for (int x = -1 * OFFSET; x <= OFFSET; x++) {
     for (int y = -1 * OFFSET; y <= OFFSET; y++) {
       gaussianFilter[x + OFFSET][y + OFFSET] =
@@ -49,5 +49,5 @@ int main() {
       outputImage[i][j] = (sum_in_current_frame) / sum;
     }
   }
-  #pragma endscop
+#pragma endscop
 }
