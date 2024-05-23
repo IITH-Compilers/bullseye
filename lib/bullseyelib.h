@@ -18,8 +18,6 @@
 // void bullseye();
 
 #include <algorithm>
-#include <boost/algorithm/string.hpp>
-#include <boost/program_options.hpp>
 #include <chrono>
 #include <fstream>
 #include <iomanip>
@@ -31,12 +29,61 @@
 
 #include <isl/options.h>
 
+#include "Definitions.h"
 #include "HayStack.h"
 #include "Timer.h"
 
-namespace po = boost::program_options;
-
 namespace bullseyelib {
+const int CACHE_LINE_SIZE = 64;
+
+// default
+const int CACHE_SIZE1 = 32 * 1024;
+const int CACHE_SIZE2 = 512 * 1024;
+
+struct ProgramParameters {
+  std::vector<long> CacheSizes;
+  long LineSize;
+  std::string InputFile;
+  std::vector<std::string> IncludePath;
+  std::vector<std::string> DefineParameters;
+  std::string ScopFunction;
+  bool ComputeBounds;
+  // std::vector<NamedLong> Parameters;
+
+  ProgramParameters() = delete;
+
+  ProgramParameters(std::string inputfile,
+                    std::vector<long> cachesizes = {CACHE_SIZE1, CACHE_SIZE2},
+                    long linesize = CACHE_LINE_SIZE,
+                    std::vector<std::string> includepath = {},
+                    std::vector<std::string> defineparameters = {},
+                    std::string scopfunction = "", bool computebounds = false)
+      : CacheSizes(cachesizes), LineSize(linesize), InputFile(inputfile),
+        IncludePath(includepath), DefineParameters(defineparameters),
+        ComputeBounds(computebounds) {}
+};
+
+struct CacheMissResults {
+  long TotalCompulsory;
+  long TotalAccesses;
+  std::vector<long> TotalCapacity;
+  machine_model MachineModel;
+  model_options ModelOptions;
+  HayStack Model;
+  std::vector<NamedMisses> CacheMisses;
+
+  CacheMissResults(long totalcompulsory, long toatlaccesses,
+                   std::vector<long> totalcapacity, machine_model mm,
+                   model_options mo, HayStack model,
+                   std::vector<NamedMisses> cm)
+      : TotalCompulsory(totalcompulsory), TotalAccesses(toatlaccesses),
+        TotalCapacity(totalcapacity), MachineModel(mm), ModelOptions(mo),
+        Model(model), CacheMisses(cm) {}
+};
+
+std::vector<NamedLong>
+ParametersFromDefineParametersIfPossible(ProgramParameters PP);
+
 bool check_path(std::string path);
 
 std::map<int, std::string> compute_lines(std::string FileName,
@@ -46,7 +93,13 @@ std::map<int, std::pair<long, long>> compute_offsets(std::string FileName);
 
 void print_scop(std::map<int, std::string> &Lines, int Start, int Stop);
 
-void run_model(isl::ctx Context, po::variables_map Variables);
+CacheMissResults run_model_new(isl::ctx Context, ProgramParameters PP);
+
+std::vector<NamedLong>
+ParametersFromDefineParametersIfPossible(ProgramParameters PP);
+
+void printCacheMissResults(ProgramParameters PP, CacheMissResults CMR);
+
 } // namespace bullseyelib
 
 #endif

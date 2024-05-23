@@ -14,7 +14,9 @@
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
 #include <boost/program_options.hpp>
+#include <boost/program_options/variables_map.hpp>
 #include <chrono>
+#include <cstdio>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -46,6 +48,33 @@ std::ostream &operator<<(std::ostream &os, const std::vector<long> &vec) {
   return os;
 }
 } // namespace std
+
+bullseyelib::ProgramParameters
+ConvertToProgramParameters(po::variables_map Variables) {
+  std::string InputFile = Variables["input-file"].as<std::string>();
+  bullseyelib::ProgramParameters PP(InputFile);
+  PP.CacheSizes =
+      Variables["cache-sizes"].as<std::vector<long>>();
+  PP.LineSize = Variables["line-size"].as<long>();
+  
+  if (Variables.count("include-path") > 0) {
+    std::vector<std::string> IncludePath =
+        Variables["include-path"].as<std::vector<std::string>>();
+    PP.IncludePath = IncludePath;
+  }
+  if (Variables.count("define-parameters") > 0) {
+    PP.DefineParameters =
+        Variables["define-parameters"].as<std::vector<std::string>>();
+  }
+  if (Variables.count("scop-function")) {
+    PP.ScopFunction = Variables["scop-function"].as<std::string>();
+  }
+  if (Variables.count("compute-counds")) {
+    PP.ComputeBounds = Variables["compute-bounds"].as<bool>();
+  }
+  return PP;
+}
+
 
 int main(int argc, const char **args) {
   try {
@@ -101,7 +130,7 @@ int main(int argc, const char **args) {
     isl::ctx Context = allocateContextWithIncludePaths(IncludePaths);
 
     // run the cache model
-    bullseyelib::run_model(Context, Variables);
+    bullseyelib::run_model_new(Context,ConvertToProgramParameters(Variables));
 
   } catch (const boost::program_options::error &ex) {
     printf("-> exit(-1) option parsing error: %s\n", ex.what());

@@ -13,8 +13,8 @@
 // }
 
 #include <algorithm>
-#include <boost/algorithm/string.hpp>
-#include <boost/program_options.hpp>
+// #include <boost/algorithm/string.hpp>
+// #include <boost/program_options.hpp>
 #include <chrono>
 #include <fstream>
 #include <iomanip>
@@ -26,23 +26,10 @@
 
 #include <isl/options.h>
 
+#include "Definitions.h"
 #include "HayStack.h"
 #include "Timer.h"
 #include "bullseyelib.h"
-
-// // define print operators
-// namespace std {
-//   std::ostream &operator<<(std::ostream &os, const std::vector<long> &vec) {
-//     for (int i = 0; i < vec.size(); ++i) {
-//       os << vec[i];
-//       if (i < vec.size() - 1)
-//         os << " ";
-//     }
-//     return os;
-//   }
-// } // namespace std
-
-namespace po = boost::program_options;
 
 namespace bullseyelib {
 bool check_path(std::string path) {
@@ -94,40 +81,12 @@ void print_scop(std::map<int, std::string> &Lines, int Start, int Stop) {
   }
 }
 
-void run_model(isl::ctx Context, po::variables_map Variables) {
-  // allocate the machine model with default values
-  machine_model MachineModel = {
-      Variables["line-size"].as<long>(),
-      Variables["cache-sizes"].as<std::vector<long>>()};
-  model_options ModelOptions = {Variables["compute-bounds"].as<bool>()};
-  printf("-> setting up cache levels\n");
-  std::sort(MachineModel.CacheSizes.begin(), MachineModel.CacheSizes.end());
-  for (auto CacheSize : MachineModel.CacheSizes) {
-    if (CacheSize % 1024 == 0) {
-      printf("   - %ldkB with %ldB cache lines\n", CacheSize / 1024,
-             MachineModel.CacheLineSize);
-    } else {
-      printf("   - %ldB with %ldB cache lines\n", CacheSize,
-             MachineModel.CacheLineSize);
-    }
-  }
-  printf("-> done\n");
-  // compute the total time
-  auto StartExecution = std::chrono::high_resolution_clock::now();
-  // allocate the cache model and compile the program
-  HayStack Model(Context, MachineModel, ModelOptions);
-  if (Variables.count("scop-function") == 0) {
-    Model.compileProgram(Variables["input-file"].as<std::string>());
-  } else {
-    Model.compileProgram(Variables["input-file"].as<std::string>(),
-                         Variables["scop-function"].as<std::string>());
-  }
-  // parsing the parameters
+std::vector<NamedLong>
+ParametersFromDefineParametersIfPossible(ProgramParameters PP) {
   std::vector<NamedLong> Parameters;
-  if (Variables.count("define-parameters") != 0) {
+  if (PP.DefineParameters.size() != 0) {
     printf("-> parsing the parameters...\n");
-    std::vector<std::string> ParamStrings =
-        Variables["define-parameters"].as<std::vector<std::string>>();
+    std::vector<std::string> ParamStrings = PP.DefineParameters;
     for (auto ParamString : ParamStrings) {
       std::string Name;
       long Value;
@@ -149,6 +108,157 @@ void run_model(isl::ctx Context, po::variables_map Variables) {
     }
     printf("-> done\n");
   }
+  return Parameters;
+}
+
+void printCacheMissResults(ProgramParameters PP, CacheMissResults CMR) {
+  // open the input file and seek the start of the scop
+  std::map<int, std::string> Lines =
+      compute_lines(PP.InputFile, CMR.Model.getScopLoc());
+  std::map<int, std::pair<long, long>> Offsets = compute_offsets(PP.InputFile);
+  long Position = Lines.begin()->first;
+  std::string LineStart;
+  std::string SingleLine;
+  std::string DoubleLine;
+  LineStart.resize(std::to_string(Lines.rbegin()->first).length() + 1, ' ');
+  SingleLine.resize(80 - LineStart.length(), '-');
+  DoubleLine.resize(80, '=');
+  // print the access infos sorted by position
+  size_t RefWidth = 16;
+  std::map<long, std::vector<access_info>> AccessInfosByLn;
+  std::map<std::string, access_info> AccessInfoByName;
+  for (auto AccessInfos : CMR.Model.getAccessInfos()) {
+    if (AccessInfos.second.empty())
+      continue;
+    AccessInfosByLn[AccessInfos.second[0].Line] = AccessInfos.second;
+    for (auto AccessInfo : AccessInfos.second) {
+      AccessInfoByName[AccessInfo.Name] = AccessInfo;
+      RefWidth = std::max(RefWidth, AccessInfo.Name.length() + 1);
+    }
+  }
+  // print the cache info access by access
+  std::cout << DoubleLine << std::endl;
+  std::cout << "                  relative number of cache misses (statement) "
+            << std::endl;
+  std::cout << DoubleLine << std::endl;
+  for (auto AccessInfos : AccessInfosByLn) {
+    // determine the last line of multiline
+    int Next = AccessInfos.first;
+    while (Offsets[Next].second < AccessInfos.second[0].Stop) {
+      Next++;
+    }
+    // print the sources
+    print_scop(Lines, Position, Next + 1);
+    Position = Next + 1;
+    // print header
+    std::cout << LineStart << SingleLine << std::endl;
+    std::cout << std::setw(RefWidth) << std::right << "ref";
+    std::cout << "  ";
+    std::cout << std::setw(6) << std::left << "type";
+    std::cout << std::setw(10) << std::left << "comp[%]";
+    for (int i = 1; i <= CMR.MachineModel.CacheSizes.size(); ++i) {
+      std::string Capacity = "L" + std::to_string(i) + "[%]";
+      std::cout << std::setw(10) << std::left << Capacity;
+    }
+    std::cout << std::setw(10) << std::left << "tot[%]";
+    std::cout << std::setw(10) << std::left << "reuse[ln]";
+    std::cout << std::endl;
+    // print the accesses
+    for (auto AccessInfo : AccessInfos.second) {
+      // find the actual cache miss info
+      auto Iter = std::find_if(
+          CMR.CacheMisses.begin(), CMR.CacheMisses.end(),
+          [&](NamedMisses Misses) { return Misses.first == AccessInfo.Name; });
+      assert(Iter != CMR.CacheMisses.end());
+      auto Compulsory = Iter->second.CompulsoryMisses;
+      auto Capacity = Iter->second.CapacityMisses;
+      auto Total = Iter->second.Total;
+      // print the access info
+      std::string Name = AccessInfo.Access;
+      if (Name.length() > RefWidth)
+        Name = Name.substr(0, RefWidth);
+      std::cout << std::setw(RefWidth) << std::right << Name;
+      std::cout << "  ";
+      std::cout << std::setw(6) << std::left
+                << (AccessInfo.ReadOrWrite == Read ? "rd" : "wr");
+      std::cout << std::setw(10) << std::left << std::setprecision(5)
+                << std::fixed
+                << 100.0 * (double)Compulsory / (double)CMR.TotalAccesses;
+      for (int i = 0; i < CMR.MachineModel.CacheSizes.size(); ++i) {
+        std::cout << std::setw(10) << std::left << std::setprecision(5)
+                  << std::fixed
+                  << 100.0 * (double)Capacity[i] / (double)CMR.TotalAccesses;
+      }
+      std::cout << std::setw(10) << std::left << std::setprecision(5)
+                << std::fixed
+                << 100.0 * (double)Total / (double)CMR.TotalAccesses;
+      // compute the reuse line numbers
+      auto Conflicts = CMR.Model.getConflicts()[AccessInfo.Name];
+      // compute the reuse line numbers
+      std::vector<int> ReuseLines;
+      for (auto Conflict : Conflicts) {
+        ReuseLines.push_back(AccessInfoByName[Conflict].Line);
+      }
+      // sort the line numbers and remove duplicates
+      std::sort(ReuseLines.begin(), ReuseLines.end());
+      auto Last = std::unique(ReuseLines.begin(), ReuseLines.end());
+      for (auto Iter = ReuseLines.begin(); Iter != Last;) {
+        std::cout << *Iter;
+        if (++Iter != Last)
+          std::cout << ",";
+      }
+      std::cout << std::endl;
+    }
+    std::cout << LineStart << SingleLine << std::endl;
+  }
+  print_scop(Lines, Position, Lines.rbegin()->first + 1);
+  // print the scop info
+  std::cout << DoubleLine << std::endl;
+  std::cout << "                     absolute number of cache misses (SCOP)"
+            << std::endl;
+  std::cout << DoubleLine << std::endl;
+  std::cout.imbue(std::locale(""));
+  std::cout << std::setw(16) << std::left << "compulsory:";
+  std::cout << std::setw(20) << std::right << CMR.TotalCompulsory << std::endl;
+  for (int i = 1; i <= CMR.MachineModel.CacheSizes.size(); ++i) {
+    std::string Capacity = "capacity (L" + std::to_string(i) + "):";
+    std::cout << std::setw(16) << std::left << Capacity;
+    std::cout << std::setw(20) << std::right << CMR.TotalCapacity[i - 1]
+              << std::endl;
+  }
+  std::cout << std::setw(16) << std::left << "total:";
+  std::cout << std::setw(20) << std::right << CMR.TotalAccesses << std::endl;
+  std::cout << DoubleLine << std::endl;
+}
+
+CacheMissResults run_model_new(isl::ctx Context, ProgramParameters PP) {
+  // allocate the machine model with default values
+  machine_model MachineModel = {PP.LineSize, PP.CacheSizes};
+  model_options ModelOptions = {PP.ComputeBounds};
+  printf("-> setting up cache levels\n");
+  std::sort(MachineModel.CacheSizes.begin(), MachineModel.CacheSizes.end());
+  for (auto CacheSize : MachineModel.CacheSizes) {
+    if (CacheSize % 1024 == 0) {
+      printf("   - %ldkB with %ldB cache lines\n", CacheSize / 1024,
+             MachineModel.CacheLineSize);
+    } else {
+      printf("   - %ldB with %ldB cache lines\n", CacheSize,
+             MachineModel.CacheLineSize);
+    }
+  }
+  printf("-> done\n");
+  // compute the total time
+  auto StartExecution = std::chrono::high_resolution_clock::now();
+  // allocate the cache model and compile the program
+  HayStack Model(Context, MachineModel, ModelOptions);
+  if (PP.ScopFunction.empty()) {
+    Model.compileProgram(PP.InputFile);
+  } else {
+    Model.compileProgram(PP.InputFile, PP.ScopFunction);
+  }
+  // parsing the parameters
+  std::vector<NamedLong> Parameters =
+      ParametersFromDefineParametersIfPossible(PP);
   // run the preprocessing
   printf("-> start processing...\n");
   auto Start = std::chrono::high_resolution_clock::now();
@@ -177,122 +287,10 @@ void run_model(isl::ctx Context, po::variables_map Variables) {
                    CacheMiss.second.CapacityMisses.begin(),
                    TotalCapacity.begin(), std::plus<long>());
   };
-  // open the input file and seek the start of the scop
-  std::map<int, std::string> Lines = compute_lines(
-      Variables["input-file"].as<std::string>(), Model.getScopLoc());
-  std::map<int, std::pair<long, long>> Offsets =
-      compute_offsets(Variables["input-file"].as<std::string>());
-  long Position = Lines.begin()->first;
-  std::string LineStart;
-  std::string SingleLine;
-  std::string DoubleLine;
-  LineStart.resize(std::to_string(Lines.rbegin()->first).length() + 1, ' ');
-  SingleLine.resize(80 - LineStart.length(), '-');
-  DoubleLine.resize(80, '=');
-  // print the access infos sorted by position
-  size_t RefWidth = 16;
-  std::map<long, std::vector<access_info>> AccessInfosByLn;
-  std::map<std::string, access_info> AccessInfoByName;
-  for (auto AccessInfos : Model.getAccessInfos()) {
-    if (AccessInfos.second.empty())
-      continue;
-    AccessInfosByLn[AccessInfos.second[0].Line] = AccessInfos.second;
-    for (auto AccessInfo : AccessInfos.second) {
-      AccessInfoByName[AccessInfo.Name] = AccessInfo;
-      RefWidth = std::max(RefWidth, AccessInfo.Name.length() + 1);
-    }
-  }
-  // print the cache info access by access
-  std::cout << DoubleLine << std::endl;
-  std::cout << "                  relative number of cache misses (statement)"
-            << std::endl;
-  std::cout << DoubleLine << std::endl;
-  for (auto AccessInfos : AccessInfosByLn) {
-    // determine the last line of multiline
-    int Next = AccessInfos.first;
-    while (Offsets[Next].second < AccessInfos.second[0].Stop) {
-      Next++;
-    }
-    // print the sources
-    print_scop(Lines, Position, Next + 1);
-    Position = Next + 1;
-    // print header
-    std::cout << LineStart << SingleLine << std::endl;
-    std::cout << std::setw(RefWidth) << std::right << "ref";
-    std::cout << "  ";
-    std::cout << std::setw(6) << std::left << "type";
-    std::cout << std::setw(10) << std::left << "comp[%]";
-    for (int i = 1; i <= MachineModel.CacheSizes.size(); ++i) {
-      std::string Capacity = "L" + std::to_string(i) + "[%]";
-      std::cout << std::setw(10) << std::left << Capacity;
-    }
-    std::cout << std::setw(10) << std::left << "tot[%]";
-    std::cout << std::setw(10) << std::left << "reuse[ln]";
-    std::cout << std::endl;
-    // print the accesses
-    for (auto AccessInfo : AccessInfos.second) {
-      // find the actual cache miss info
-      auto Iter = std::find_if(
-          CacheMisses.begin(), CacheMisses.end(),
-          [&](NamedMisses Misses) { return Misses.first == AccessInfo.Name; });
-      assert(Iter != CacheMisses.end());
-      auto Compulsory = Iter->second.CompulsoryMisses;
-      auto Capacity = Iter->second.CapacityMisses;
-      auto Total = Iter->second.Total;
-      // print the access info
-      std::string Name = AccessInfo.Access;
-      if (Name.length() > RefWidth)
-        Name = Name.substr(0, RefWidth);
-      std::cout << std::setw(RefWidth) << std::right << Name;
-      std::cout << "  ";
-      std::cout << std::setw(6) << std::left
-                << (AccessInfo.ReadOrWrite == Read ? "rd" : "wr");
-      std::cout << std::setw(10) << std::left << std::setprecision(5)
-                << std::fixed
-                << 100.0 * (double)Compulsory / (double)TotalAccesses;
-      for (int i = 0; i < MachineModel.CacheSizes.size(); ++i) {
-        std::cout << std::setw(10) << std::left << std::setprecision(5)
-                  << std::fixed
-                  << 100.0 * (double)Capacity[i] / (double)TotalAccesses;
-      }
-      std::cout << std::setw(10) << std::left << std::setprecision(5)
-                << std::fixed << 100.0 * (double)Total / (double)TotalAccesses;
-      // compute the reuse line numbers
-      auto Conflicts = Model.getConflicts()[AccessInfo.Name];
-      // compute the reuse line numbers
-      std::vector<int> ReuseLines;
-      for (auto Conflict : Conflicts) {
-        ReuseLines.push_back(AccessInfoByName[Conflict].Line);
-      }
-      // sort the line numbers and remove duplicates
-      std::sort(ReuseLines.begin(), ReuseLines.end());
-      auto Last = std::unique(ReuseLines.begin(), ReuseLines.end());
-      for (auto Iter = ReuseLines.begin(); Iter != Last;) {
-        std::cout << *Iter;
-        if (++Iter != Last)
-          std::cout << ",";
-      }
-      std::cout << std::endl;
-    }
-    std::cout << LineStart << SingleLine << std::endl;
-  }
-  print_scop(Lines, Position, Lines.rbegin()->first + 1);
-  // print the scop info
-  std::cout << DoubleLine << std::endl;
-  std::cout << "                     absolute number of cache misses (SCOP)"
-            << std::endl;
-  std::cout << DoubleLine << std::endl;
-  std::cout.imbue(std::locale(""));
-  std::cout << std::setw(16) << std::left << "compulsory:";
-  std::cout << std::setw(20) << std::right << TotalCompulsory << std::endl;
-  for (int i = 1; i <= MachineModel.CacheSizes.size(); ++i) {
-    std::string Capacity = "capacity (L" + std::to_string(i) + "):";
-    std::cout << std::setw(16) << std::left << Capacity;
-    std::cout << std::setw(20) << std::right << TotalCapacity[i - 1]
-              << std::endl;
-  }
-  std::cout << std::setw(16) << std::left << "total:";
-  std::cout << std::setw(20) << std::right << TotalAccesses << std::endl;
-  std::cout << DoubleLine << std::endl;
+  CacheMissResults CMR(TotalCompulsory, TotalAccesses, TotalCapacity,
+                       MachineModel, ModelOptions, Model, CacheMisses);
+  printCacheMissResults(PP, CMR);
+  return CMR;
 }
+
 } // namespace bullseyelib
