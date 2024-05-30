@@ -22,10 +22,14 @@ class HayStack {
 public:
   HayStack() = delete;
   HayStack(const HayStack &other) = default;
-  HayStack(isl::ctx Context, machine_model MachineModel, model_options ModelOptions)
-      : Context_(Context), MachineModel_(MachineModel), ModelOptions_(ModelOptions), Program_(Context, MachineModel){};
-  HayStack(isl::ctx Context, machine_model MachineModel, model_options ModelOptions, Program P)
-      : Context_(Context), MachineModel_(MachineModel), ModelOptions_(ModelOptions), Program_(P){};
+  HayStack(isl::ctx Context, machine_model MachineModel,
+           model_options ModelOptions)
+      : Context_(Context), MachineModel_(MachineModel),
+        ModelOptions_(ModelOptions), Program_(Context, MachineModel){};
+  HayStack(isl::ctx Context, machine_model MachineModel,
+           model_options ModelOptions, Program P)
+      : Context_(Context), MachineModel_(MachineModel),
+        ModelOptions_(ModelOptions), Program_(P){};
 
   void compileProgram(std::string SourceFile);
   void compileProgram(std::string SourceFile, std::string ScopFunction);
@@ -42,10 +46,16 @@ public:
   std::vector<NamedVector> countCacheMisses(std::vector<long> CacheSizes);
 
   std::vector<Access> getAccesses() const { return Accesses_; }
-  std::map<std::string, std::vector<std::string>> getConflicts() const { return Conflicts_; }
+  std::map<std::string, std::vector<std::string>> getConflicts() const {
+    return Conflicts_;
+  }
 
-  std::pair<unsigned, unsigned> getScopLoc() const { return Program_.getScopLoc(); }
-  std::map<std::string, std::vector<access_info>> getAccessInfos() const { return Program_.getAccessInfos(); }
+  std::pair<unsigned, unsigned> getScopLoc() const {
+    return Program_.getScopLoc();
+  }
+  std::map<std::string, std::vector<access_info>> getAccessInfos() const {
+    return Program_.getAccessInfos();
+  }
 
 private:
   void computeGlobalMaps();

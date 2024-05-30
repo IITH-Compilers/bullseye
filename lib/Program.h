@@ -1,6 +1,6 @@
 /*
-* Copyright (c) 2019, ETH Zurich
-*/
+ * Copyright (c) 2019, ETH Zurich
+ */
 
 #ifndef _SCOP_H_
 #define _SCOP_H_
@@ -16,7 +16,8 @@
 class Program {
 public:
   Program() = delete;
-  Program(isl::ctx Context, machine_model MachineModel) : Context_(Context), MachineModel_(MachineModel) {}
+  Program(isl::ctx Context, machine_model MachineModel)
+      : Context_(Context), MachineModel_(MachineModel) {}
 
   void extractScop(std::string SourceFile, std::string ScopFunction);
 
@@ -30,15 +31,19 @@ public:
   isl::union_map getAccessToElement() const { return AccessToElement_; }
   std::map<std::string, long> getElementSizes() const { return ElementSizes_; }
 
-  std::map<std::string, std::vector<access_info>> getAccessInfos() const { return AccessInfos_; }
+  std::map<std::string, std::vector<access_info>> getAccessInfos() const {
+    return AccessInfos_;
+  }
   std::pair<unsigned, unsigned> getScopLoc() const { return ScopLoc_; };
 
 private:
   void extractReferences();
   void extendSchedule();
   isl::union_map extendAccesses(isl::union_map Accesses, bool WriteReferences);
-  isl::map introduceCacheLines(std::string Name, isl::map AccessToArray, long ElementsPerCacheLine) const;
-  isl::map introduceCacheSets(std::string Name, isl::map AccessToArray, long NumberOfCacheSets) const;
+  isl::map introduceCacheLines(std::string Name, isl::map AccessToArray,
+                               long ElementsPerCacheLine) const;
+  isl::map introduceCacheSets(std::string Name, isl::map AccessToArray,
+                              long NumberOfCacheSets) const;
 
   isl::ctx Context_;
   machine_model MachineModel_;

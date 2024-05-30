@@ -19,9 +19,7 @@ inline isl::pw_aff operator+(int i, isl::pw_aff A) {
 
 inline isl::pw_aff operator+(isl::pw_aff A, int i) { return i + A; }
 
-inline isl::val operator+(isl::val A, isl::val B) {
-  return A.mul(B);
-}
+inline isl::val operator+(isl::val A, isl::val B) { return A.mul(B); }
 
 inline isl::pw_aff operator*(isl::pw_aff A, isl::pw_aff B) { return A.mul(B); }
 
@@ -39,9 +37,7 @@ inline isl::pw_aff operator*(int i, isl::pw_aff A) {
 
 inline isl::pw_aff operator*(isl::pw_aff A, int i) { return i * A; }
 
-inline isl::val operator*(isl::val A, isl::val B) {
-  return A.mul(B);
-}
+inline isl::val operator*(isl::val A, isl::val B) { return A.mul(B); }
 
 inline isl::pw_aff operator-(isl::pw_aff A, isl::pw_aff B) { return A.sub(B); }
 
@@ -113,24 +109,14 @@ inline isl::pw_aff operator%(isl::pw_aff A, int i) {
   return A % isl::val(ctx, i);
 }
 
-inline isl::set operator==(isl::pw_aff A, int i) {
-  return A.eq_set(0 * A + i);
-}
+inline isl::set operator==(isl::pw_aff A, int i) { return A.eq_set(0 * A + i); }
 
-inline isl::set operator==(isl::pw_aff A, isl::pw_aff B) {
-  return A.eq_set(B);
-}
+inline isl::set operator==(isl::pw_aff A, isl::pw_aff B) { return A.eq_set(B); }
 
-inline isl::set operator>=(isl::pw_aff A, isl::pw_aff B) {
-  return A.ge_set(B);
-}
+inline isl::set operator>=(isl::pw_aff A, isl::pw_aff B) { return A.ge_set(B); }
 
-inline isl::set operator&&(isl::set A, isl::set B) {
-  return A.intersect(B);
-}
+inline isl::set operator&&(isl::set A, isl::set B) { return A.intersect(B); }
 
-inline isl::set operator||(isl::set A, isl::set B) {
-  return A.unite(B);
-}
+inline isl::set operator||(isl::set A, isl::set B) { return A.unite(B); }
 
 #endif

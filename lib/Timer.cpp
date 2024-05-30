@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2022, BullsEye
-   Adopted from HayStack 
+   Adopted from HayStack
  */
 
 #include "Timer.h"

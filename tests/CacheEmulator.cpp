@@ -1,6 +1,6 @@
 /*
-* Copyright (c) 2019, ETH Zurich
-*/
+ * Copyright (c) 2019, ETH Zurich
+ */
 
 #include <algorithm>
 
@@ -10,7 +10,8 @@
 #include <iostream>
 #include <iterator>
 
-void CacheEmulator::accessMemory(std::string Statement, int &TimeStamp, std::vector<int> CacheLines) {
+void CacheEmulator::accessMemory(std::string Statement, int &TimeStamp,
+                                 std::vector<int> CacheLines) {
   // initialize the result if necessary
   if (StackDistances_[Statement].size() == 0)
     StackDistances_[Statement].resize(CacheLines.size(), 0);
@@ -43,16 +44,25 @@ void CacheEmulator::accessMemory(std::string Statement, int &TimeStamp, std::vec
   }
 }
 
-std::map<std::string, std::vector<long>> CacheEmulator::getStackDistances() const {
+std::map<std::string, std::vector<long>>
+CacheEmulator::getStackDistances() const {
   // remove zero entries
   std::map<std::string, std::vector<long>> Results;
-  std::copy_if(StackDistances_.begin(), StackDistances_.end(), std::inserter(Results, Results.end()),
+  std::copy_if(StackDistances_.begin(), StackDistances_.end(),
+               std::inserter(Results, Results.end()),
                [](decltype(Results)::value_type const &Statement) {
-                 return *std::max_element(Statement.second.begin(), Statement.second.end()) > 0;
+                 return *std::max_element(Statement.second.begin(),
+                                          Statement.second.end()) > 0;
                });
   return Results;
 }
 
-std::map<std::string, std::vector<long>> CacheEmulator::getCapacityMisses() const { return CapacityMisses_; }
+std::map<std::string, std::vector<long>>
+CacheEmulator::getCapacityMisses() const {
+  return CapacityMisses_;
+}
 
-std::map<std::string, std::vector<long>> CacheEmulator::getCompulsoryMisses() const { return CompulsoryMisses_; }
+std::map<std::string, std::vector<long>>
+CacheEmulator::getCompulsoryMisses() const {
+  return CompulsoryMisses_;
+}

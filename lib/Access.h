@@ -19,10 +19,11 @@ class Access {
 public:
   Access() = delete;
   Access(const Access &other) = default;
-  Access(std::string Name, machine_model MachineModel, model_options ModelOptions, isl::set Domain,
+  Access(std::string Name, machine_model MachineModel,
+         model_options ModelOptions, isl::set Domain,
          std::map<std::string, long> ElementSizes)
-      : Name_(Name), MachineModel_(MachineModel), ModelOptions_(ModelOptions), Domain_(Domain),
-        ElementSizes_(ElementSizes) {}
+      : Name_(Name), MachineModel_(MachineModel), ModelOptions_(ModelOptions),
+        Domain_(Domain), ElementSizes_(ElementSizes) {}
 
   // control the cache miss computation
   void initAccess(std::vector<NamedLong> ParameterValues, isl::set Parameters);
@@ -55,31 +56,42 @@ private:
   void enumerateNonAffineDimensions(piece Piece);
 
   // counting methods
-  std::vector<long> countAffineDimensions(piece Piece, std::vector<long> Limits) const;
-  std::vector<long> enumerateNonAffinePoints(piece Piece, std::vector<long> Limits) const;
+  std::vector<long> countAffineDimensions(piece Piece,
+                                          std::vector<long> Limits) const;
+  std::vector<long> enumerateNonAffinePoints(piece Piece,
+                                             std::vector<long> Limits) const;
 
   // helper functions to analyze piece and extract the affine expression
   bool isPieceAffine(piece Piece) const;
   isl::pw_aff extractAffineExpression(piece Piece) const;
-  isl::aff extractAffineExpression(isl::qpolynomial, isl::set Domain, std::map<int, long> Values) const;
+  isl::aff extractAffineExpression(isl::qpolynomial, isl::set Domain,
+                                   std::map<int, long> Values) const;
   long getPieceSize(piece &Piece) const;
 
   // elimination helper methods
   int computeExponent(piece Piece) const;
   int computeDimensionExponent(int Dimension, piece Piece) const;
 
-  isl::qpolynomial computeReplacement(std::map<int, isl::qpolynomial> Replacements, piece Piece) const;
+  isl::qpolynomial
+  computeReplacement(std::map<int, isl::qpolynomial> Replacements,
+                     piece Piece) const;
 
   // methods to eliminate floor terms due to equalization
-  std::vector<std::vector<std::tuple<int, long, long>>> findEqualizationCandidates(piece Piece) const;
-  std::vector<long> computeSplits(std::vector<std::tuple<int, long, long>> Candidate, piece Piece) const;
-  std::vector<piece> equalizeCandidate(std::vector<std::tuple<int, long, long>> Candidate, std::vector<long> Splits,
-                                       piece Piece) const;
+  std::vector<std::vector<std::tuple<int, long, long>>>
+  findEqualizationCandidates(piece Piece) const;
+  std::vector<long>
+  computeSplits(std::vector<std::tuple<int, long, long>> Candidate,
+                piece Piece) const;
+  std::vector<piece>
+  equalizeCandidate(std::vector<std::tuple<int, long, long>> Candidate,
+                    std::vector<long> Splits, piece Piece) const;
 
   // methods to eliminate floor terms due to rasterization
   std::vector<int> findRasterDimensions(piece Piece) const;
-  std::vector<isl::val> computeMultipliers(std::vector<int> Dimensions, piece Piece) const;
-  std::vector<piece> rasterDimension(int Dimension, isl::val Multiplier, piece Piece) const;
+  std::vector<isl::val> computeMultipliers(std::vector<int> Dimensions,
+                                           piece Piece) const;
+  std::vector<piece> rasterDimension(int Dimension, isl::val Multiplier,
+                                     piece Piece) const;
 
   // method to verify splits
   bool verifySplit(piece Piece, std::vector<piece> Pieces) const;
@@ -107,6 +119,8 @@ private:
 };
 
 // support sorting
-inline bool operator<(Access const &A, Access const &B) { return A.getName() < B.getName(); }
+inline bool operator<(Access const &A, Access const &B) {
+  return A.getName() < B.getName();
+}
 
 #endif
