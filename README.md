@@ -64,5 +64,31 @@ By setting the prefix to the home folder, we can choose to install the tool in t
 Use the following command to run bullseye on the example program gemm.c
 ```
 bullseye -f ./examples/gemm.c
-```  
+```
 
+## Citing BullsEye
+
+If you use BullsEye, please consider citing the relevant publications:
+
+``` bibtex
+@article{10.1145/3558003,
+author = {Shah, Nilesh Rajendra and Misra, Ashitabh and Min\'{e}, Antoine and Venkat, Rakesh and Upadrasta, Ramakrishna},
+title = {
+BullsEye : Scalable and Accurate Approximation Framework for Cache Miss Calculation},
+year = {2022},
+issue_date = {March 2023},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+volume = {20},
+number = {1},
+issn = {1544-3566},
+url = {https://doi.org/10.1145/3558003},
+doi = {10.1145/3558003},
+abstract = {For Affine Control Programs or Static Control Programs (SCoP), symbolic counting of reuse distances could induce polynomials for each reuse pair. These polynomials along with cache capacity constraints lead to non-affine (semi-algebraic) sets; and counting these sets is considered to be a hard problem. The state-of-the-art methods use various exact enumeration techniques relying on existing cardinality algorithms that can efficiently count affine sets.We propose BullsEye , a novel, scalable, accurate, and problem-size independent approximation framework. It is an analytical cache model for fully associative caches with LRU replacement policy focusing on sampling and linearization of non-affine stack distance polynomials. First, we propose a simple domain sampling method that can improve the scalability of exact enumeration. Second, we propose linearization techniques relying on Handelman’s theorem and Bernstein’s representation. To improve the scalability of the Handelman’s theorem linearization technique, we propose template (Interval or Octagon) sub-polyhedral approximations.Our methods obtain significant compile-time improvements with high-accuracy when compared to HayStack on important polyhedral compilation kernels such as nussinov, cholesky, and adi from PolyBench, and harris, gaussianblur from LLVM-TestSuite. Overall, on PolyBench kernels, our methods show up to 3.31\texttimes{} (geomean) speedup with errors below ≈ 0.08\% (geomean) for the octagon sub-polyhedral approximation.},
+journal = {ACM Trans. Archit. Code Optim.},
+month = {nov},
+articleno = {2},
+numpages = {28},
+keywords = {Static analysis, cache model, performance analysis}
+}
+```
