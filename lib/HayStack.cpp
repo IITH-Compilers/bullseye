@@ -12,6 +12,10 @@
 
 #include "barvinok/isl.h"
 
+long long HayStack::countFlops() {
+    return Program_.getTotalFlopCount();
+}
+
 isl_ctx *
 allocateContextWithIncludePaths(std::vector<std::string> IncludePaths) {
   // pass the include paths to the context

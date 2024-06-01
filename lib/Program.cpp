@@ -24,8 +24,7 @@ void Program::extractScop(std::string SourceFile, std::string ScopFunction) {
   Reads_ = isl::manage(pet_scop_get_tagged_may_reads(PetScop));
   Writes_ = isl::manage(pet_scop_get_tagged_may_writes(PetScop));
 
-  static unsigned stmt_read_count = 0;
-   long long int TotalFlopCount_ = 0;
+  static unsigned stmt_read_count = 0; 
 
   // check if the schedule is bounded
   auto checkIfBounded = [](isl::set Set) {
@@ -107,11 +106,9 @@ void Program::extractScop(std::string SourceFile, std::string ScopFunction) {
                                  &AccessInfos_[Statement]);
 
     AccessMapStmt[Statement] = stmt_read_count-1;
-    if(AccessMapStmt[Statement]!=-1) {
-      // fprintf(stderr, "fcount: %ld\n", fcount);
+    if(AccessMapStmt[Statement]!=-1) { 
       TotalFlopCount_ += fcount*AccessMapStmt[Statement];
-    }
-    // fprintf(stderr, "TotalFlopCount: %lld\n", TotalFlopCount_);
+    } 
 
     // get the line number
     pet_loc *Loc = pet_tree_get_loc(PetScop->stmts[idx]->body);
@@ -135,11 +132,6 @@ void Program::extractScop(std::string SourceFile, std::string ScopFunction) {
 
   // compute the access domain
   AccessDomain_ = Reads_.domain().unite(Writes_.domain()).coalesce();
-
-  // print AccessStmtMap
-  // for (auto &AccessStmt : AccessMapStmt) {
-  //   fprintf(stderr, "AccessStmt: %s, %i\n", AccessStmt.first.c_str(), AccessStmt.second);
-  // }
 
   // free the pet scop
   pet_scop_free(PetScop);
