@@ -1,6 +1,6 @@
 /*
-* Copyright (c) 2019, ETH Zurich
-*/
+ * Copyright (c) 2019, ETH Zurich
+ */
 
 #include "gtest/gtest.h"
 
@@ -15,7 +15,8 @@ const int CacheLineSize = 16 / ElementSize;
 const int CacheSize = 1024 / ElementSize;
 
 // execute multiplication with the emulator
-void emulateMultiplication(int N1, int N2, int N3, int CacheLineSize, CacheEmulator &Emulator) {
+void emulateMultiplication(int N1, int N2, int N3, int CacheLineSize,
+                           CacheEmulator &Emulator) {
   int TimeStamp = 0;
   // define the index to cachline conversion
   int StrideA = (N3 + CacheLineSize - 1) / CacheLineSize;
@@ -24,8 +25,12 @@ void emulateMultiplication(int N1, int N2, int N3, int CacheLineSize, CacheEmula
   int OffsetB = N1 * StrideA;
   int OffsetC = OffsetB + N3 * StrideB;
   auto CLA = [&](int i, int j) { return i * StrideA + j / CacheLineSize; };
-  auto CLB = [&](int i, int j) { return OffsetB + i * StrideB + j / CacheLineSize; };
-  auto CLC = [&](int i, int j) { return OffsetC + i * StrideC + j / CacheLineSize; };
+  auto CLB = [&](int i, int j) {
+    return OffsetB + i * StrideB + j / CacheLineSize;
+  };
+  auto CLC = [&](int i, int j) {
+    return OffsetC + i * StrideC + j / CacheLineSize;
+  };
   // run multiplication
   for (int i = 0; i < N1; i++) {
     for (int j = 0; j < N2; j++)
@@ -34,7 +39,8 @@ void emulateMultiplication(int N1, int N2, int N3, int CacheLineSize, CacheEmula
     for (int k = 0; k < N3; k++) {
       for (int j = 0; j < N2; j++)
         // C[i][j] += alpha * A[i][k] * B[k][j];
-        Emulator.accessMemory("S1", TimeStamp, {CLC(i, j), CLA(i, k), CLB(k, j), CLC(i, j)});
+        Emulator.accessMemory("S1", TimeStamp,
+                              {CLC(i, j), CLA(i, k), CLB(k, j), CLC(i, j)});
     }
   }
 }
@@ -45,7 +51,9 @@ protected:
     Context_ = isl_ctx_alloc_with_pet_options();
     isl_options_set_on_error(Context_, ISL_ON_ERROR_ABORT);
 
-    Base_ = new HayStack(Context_, {CacheLineSize * ElementSize, {CacheSize * ElementSize}}, {true});
+    Base_ = new HayStack(
+        Context_, {CacheLineSize * ElementSize, {CacheSize * ElementSize}},
+        {true});
     Base_->compileProgram("./multiplication.c");
   }
 
@@ -71,9 +79,11 @@ TEST_F(MultiplicationTest, CapacityMissesEven) {
   int N1 = 32;
   int N2 = 16;
   int N3 = 24;
-  int CacheLines = N1 * ((N3 + CacheLineSize - 1) / CacheLineSize) + N3 * ((N2 + CacheLineSize - 1) / CacheLineSize) +
+  int CacheLines = N1 * ((N3 + CacheLineSize - 1) / CacheLineSize) +
+                   N3 * ((N2 + CacheLineSize - 1) / CacheLineSize) +
                    N1 * ((N2 + CacheLineSize - 1) / CacheLineSize);
-  std::vector<NamedLong> Parameters = {std::make_pair(std::string("N1"), N1), std::make_pair(std::string("N2"), N2),
+  std::vector<NamedLong> Parameters = {std::make_pair(std::string("N1"), N1),
+                                       std::make_pair(std::string("N2"), N2),
                                        std::make_pair(std::string("N3"), N3)};
   // emulate the stack distances
   CacheEmulator Emulator(CacheLines, CacheSize / CacheLineSize);
@@ -87,7 +97,8 @@ TEST_F(MultiplicationTest, CapacityMissesEven) {
     std::string Statement = ComputedCapacityMiss.first;
     auto length = Statement.find_first_of("(");
     Statement = Statement.substr(0, length);
-    ComputedCapacityMisses[Statement].push_back(ComputedCapacityMiss.second.CapacityMisses[0]);
+    ComputedCapacityMisses[Statement].push_back(
+        ComputedCapacityMiss.second.CapacityMisses[0]);
   }
 
   // print computed and expected stack distances
@@ -109,7 +120,8 @@ TEST_F(MultiplicationTest, CapacityMissesEven) {
 
   // compare the stack distances for all statements
   for (auto ComputedCapacityMiss : ComputedCapacityMisses) {
-    auto ExpectedCapacityMiss = ExpectedCapacityMisses[ComputedCapacityMiss.first];
+    auto ExpectedCapacityMiss =
+        ExpectedCapacityMisses[ComputedCapacityMiss.first];
     ASSERT_EQ(ExpectedCapacityMiss.size(), ComputedCapacityMiss.second.size());
 
     for (int i = 0; i < ComputedCapacityMiss.second.size(); ++i)
@@ -122,9 +134,11 @@ TEST_F(MultiplicationTest, CompulsoryMissesEven) {
   int N1 = 32;
   int N2 = 16;
   int N3 = 24;
-  int CacheLines = N1 * ((N3 + CacheLineSize - 1) / CacheLineSize) + N3 * ((N2 + CacheLineSize - 1) / CacheLineSize) +
+  int CacheLines = N1 * ((N3 + CacheLineSize - 1) / CacheLineSize) +
+                   N3 * ((N2 + CacheLineSize - 1) / CacheLineSize) +
                    N1 * ((N2 + CacheLineSize - 1) / CacheLineSize);
-  std::vector<NamedLong> Parameters = {std::make_pair(std::string("N1"), N1), std::make_pair(std::string("N2"), N2),
+  std::vector<NamedLong> Parameters = {std::make_pair(std::string("N1"), N1),
+                                       std::make_pair(std::string("N2"), N2),
                                        std::make_pair(std::string("N3"), N3)};
   // emulate the stack distances
   CacheEmulator Emulator(CacheLines, CacheSize / CacheLineSize);
@@ -138,7 +152,8 @@ TEST_F(MultiplicationTest, CompulsoryMissesEven) {
     std::string Statement = ComputedCompulsoryMiss.first;
     auto length = Statement.find_first_of("(");
     Statement = Statement.substr(0, length);
-    ComputedCompulsoryMisses[Statement].push_back(ComputedCompulsoryMiss.second.CompulsoryMisses);
+    ComputedCompulsoryMisses[Statement].push_back(
+        ComputedCompulsoryMiss.second.CompulsoryMisses);
   }
 
   // print computed and expected stack distances
@@ -160,8 +175,10 @@ TEST_F(MultiplicationTest, CompulsoryMissesEven) {
 
   // compare the stack distances for all statements
   for (auto ComputedCompulsoryMiss : ComputedCompulsoryMisses) {
-    auto ExpectedCompulsoryMiss = ExpectedCompulsoryMisses[ComputedCompulsoryMiss.first];
-    ASSERT_EQ(ExpectedCompulsoryMiss.size(), ComputedCompulsoryMiss.second.size());
+    auto ExpectedCompulsoryMiss =
+        ExpectedCompulsoryMisses[ComputedCompulsoryMiss.first];
+    ASSERT_EQ(ExpectedCompulsoryMiss.size(),
+              ComputedCompulsoryMiss.second.size());
 
     for (int i = 0; i < ComputedCompulsoryMiss.second.size(); ++i)
       EXPECT_EQ(ExpectedCompulsoryMiss[i], ComputedCompulsoryMiss.second[i]);
@@ -173,9 +190,11 @@ TEST_F(MultiplicationTest, CapacityMissesOdd) {
   int N1 = 33;
   int N2 = 11;
   int N3 = 22;
-  int CacheLines = N1 * ((N3 + CacheLineSize - 1) / CacheLineSize) + N3 * ((N2 + CacheLineSize - 1) / CacheLineSize) +
+  int CacheLines = N1 * ((N3 + CacheLineSize - 1) / CacheLineSize) +
+                   N3 * ((N2 + CacheLineSize - 1) / CacheLineSize) +
                    N1 * ((N2 + CacheLineSize - 1) / CacheLineSize);
-  std::vector<NamedLong> Parameters = {std::make_pair(std::string("N1"), N1), std::make_pair(std::string("N2"), N2),
+  std::vector<NamedLong> Parameters = {std::make_pair(std::string("N1"), N1),
+                                       std::make_pair(std::string("N2"), N2),
                                        std::make_pair(std::string("N3"), N3)};
   // emulate the stack distances
   CacheEmulator Emulator(CacheLines, CacheSize / CacheLineSize);
@@ -189,7 +208,8 @@ TEST_F(MultiplicationTest, CapacityMissesOdd) {
     std::string Statement = ComputedCapacityMiss.first;
     auto length = Statement.find_first_of("(");
     Statement = Statement.substr(0, length);
-    ComputedCapacityMisses[Statement].push_back(ComputedCapacityMiss.second.CapacityMisses[0]);
+    ComputedCapacityMisses[Statement].push_back(
+        ComputedCapacityMiss.second.CapacityMisses[0]);
   }
 
   // print computed and expected stack distances
@@ -211,7 +231,8 @@ TEST_F(MultiplicationTest, CapacityMissesOdd) {
 
   // compare the stack distances for all statements
   for (auto ComputedCapacityMiss : ComputedCapacityMisses) {
-    auto ExpectedCapacityMiss = ExpectedCapacityMisses[ComputedCapacityMiss.first];
+    auto ExpectedCapacityMiss =
+        ExpectedCapacityMisses[ComputedCapacityMiss.first];
     ASSERT_EQ(ExpectedCapacityMiss.size(), ComputedCapacityMiss.second.size());
 
     for (int i = 0; i < ComputedCapacityMiss.second.size(); ++i)
@@ -224,9 +245,11 @@ TEST_F(MultiplicationTest, CompulsoryMissesOdd) {
   int N1 = 33;
   int N2 = 11;
   int N3 = 22;
-  int CacheLines = N1 * ((N3 + CacheLineSize - 1) / CacheLineSize) + N3 * ((N2 + CacheLineSize - 1) / CacheLineSize) +
+  int CacheLines = N1 * ((N3 + CacheLineSize - 1) / CacheLineSize) +
+                   N3 * ((N2 + CacheLineSize - 1) / CacheLineSize) +
                    N1 * ((N2 + CacheLineSize - 1) / CacheLineSize);
-  std::vector<NamedLong> Parameters = {std::make_pair(std::string("N1"), N1), std::make_pair(std::string("N2"), N2),
+  std::vector<NamedLong> Parameters = {std::make_pair(std::string("N1"), N1),
+                                       std::make_pair(std::string("N2"), N2),
                                        std::make_pair(std::string("N3"), N3)};
   // emulate the stack distances
   CacheEmulator Emulator(CacheLines, CacheSize / CacheLineSize);
@@ -240,7 +263,8 @@ TEST_F(MultiplicationTest, CompulsoryMissesOdd) {
     std::string Statement = ComputedCompulsoryMiss.first;
     auto length = Statement.find_first_of("(");
     Statement = Statement.substr(0, length);
-    ComputedCompulsoryMisses[Statement].push_back(ComputedCompulsoryMiss.second.CompulsoryMisses);
+    ComputedCompulsoryMisses[Statement].push_back(
+        ComputedCompulsoryMiss.second.CompulsoryMisses);
   }
 
   // print computed and expected stack distances
@@ -262,8 +286,10 @@ TEST_F(MultiplicationTest, CompulsoryMissesOdd) {
 
   // compare the stack distances for all statements
   for (auto ComputedCompulsoryMiss : ComputedCompulsoryMisses) {
-    auto ExpectedCompulsoryMiss = ExpectedCompulsoryMisses[ComputedCompulsoryMiss.first];
-    ASSERT_EQ(ExpectedCompulsoryMiss.size(), ComputedCompulsoryMiss.second.size());
+    auto ExpectedCompulsoryMiss =
+        ExpectedCompulsoryMisses[ComputedCompulsoryMiss.first];
+    ASSERT_EQ(ExpectedCompulsoryMiss.size(),
+              ComputedCompulsoryMiss.second.size());
 
     for (int i = 0; i < ComputedCompulsoryMiss.second.size(); ++i)
       EXPECT_EQ(ExpectedCompulsoryMiss[i], ComputedCompulsoryMiss.second[i]);

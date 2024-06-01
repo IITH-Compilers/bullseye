@@ -12,7 +12,8 @@
 
 #include "barvinok/isl.h"
 
-isl_ctx *allocateContextWithIncludePaths(std::vector<std::string> IncludePaths) {
+isl_ctx *
+allocateContextWithIncludePaths(std::vector<std::string> IncludePaths) {
   // pass the include paths to the context
   std::vector<char *> Arguments;
   char Argument1[] = "program";
@@ -25,12 +26,16 @@ isl_ctx *allocateContextWithIncludePaths(std::vector<std::string> IncludePaths) 
   int ArgumentCount = Arguments.size();
   struct pet_options *options;
   options = pet_options_new_with_defaults();
-  ArgumentCount = pet_options_parse(options, ArgumentCount, &Arguments[0], ISL_ARG_ALL);
+  ArgumentCount =
+      pet_options_parse(options, ArgumentCount, &Arguments[0], ISL_ARG_ALL);
   return isl_ctx_alloc_with_options(&pet_options_args, options);
 }
 
-void HayStack::compileProgram(std::string SourceFile) { compileProgram(SourceFile, ""); }
-void HayStack::compileProgram(std::string SourceFile, std::string ScopFunction) {
+void HayStack::compileProgram(std::string SourceFile) {
+  compileProgram(SourceFile, "");
+}
+void HayStack::compileProgram(std::string SourceFile,
+                              std::string ScopFunction) {
   Program_.extractScop(SourceFile, ScopFunction);
 }
 
@@ -45,11 +50,13 @@ void HayStack::initModel(std::vector<NamedLong> Parameters) {
   }
   std::map<int, NamedLong> SortedParameters;
   for (auto &Parameter : Parameters) {
-    int Position = Parameters_.find_dim_by_name(isl::dim::param, Parameter.first);
+    int Position =
+        Parameters_.find_dim_by_name(isl::dim::param, Parameter.first);
     if (Position < 0 || Position >= NumberOfParameters) {
       printf("-> ignoring parameter %s\n", Parameter.first.c_str());
     } else {
-      Parameters_ = Parameters_.fix_si(isl::dim::param, Position, Parameter.second);
+      Parameters_ =
+          Parameters_.fix_si(isl::dim::param, Position, Parameter.second);
       SortedParameters[Position] = Parameter;
     }
   }
@@ -98,10 +105,11 @@ std::vector<NamedMisses> HayStack::countCacheMisses() {
     // compute the next map for the level
     auto Next = Remaining.intersect(Filter).lexmax();
     if (i > 0) {
-      Remaining = Remaining.subtract_domain(Next.domain()); 
+      Remaining = Remaining.subtract_domain(Next.domain());
     }
     // compute the between map
-    Next = Schedule_.apply_range(Next).apply_range(Schedule_.reverse()).coalesce();
+    Next =
+        Schedule_.apply_range(Next).apply_range(Schedule_.reverse()).coalesce();
     auto After = Next.apply_range(Forward_);
     auto BetweenMap = After.intersect(Before_);
     addConflicts(Next);
@@ -109,14 +117,15 @@ std::vector<NamedMisses> HayStack::countCacheMisses() {
     BetweenMap = BetweenMap.detect_equalities(); // important
     Timer::stopTimer("ComputeBetweenMap");
     // compute the cache misses
-    for (auto &Current : Accesses_) { 
+    for (auto &Current : Accesses_) {
       Current.computeStackDistances(BetweenMap);
     }
   }
 #else
   Timer::startTimer("ComputeBetweenMap");
   auto Next = SameLineSucc_.reverse().lexmax();
-  Next = Schedule_.apply_range(Next).apply_range(Schedule_.reverse()).coalesce();
+  Next =
+      Schedule_.apply_range(Next).apply_range(Schedule_.reverse()).coalesce();
   auto After = Next.apply_range(Forward_);
   auto BetweenMap = After.intersect(Before_);
   addConflicts(Next);
@@ -137,7 +146,8 @@ std::vector<NamedMisses> HayStack::countCacheMisses() {
   return Results;
 }
 
-std::vector<NamedVector> HayStack::countCacheMisses(std::vector<long> CacheSizes) {
+std::vector<NamedVector>
+HayStack::countCacheMisses(std::vector<long> CacheSizes) {
   std::vector<NamedVector> Results;
   // compute the misses for all accesses
   for (auto &Current : Accesses_) {
@@ -168,7 +178,8 @@ void HayStack::computeGlobalMaps() {
   Schedule_ = Schedule_.coalesce();
 
   // map the iterations to the cache lines and cache sets
-  isl::union_map IterToLine = Program_.getAccessToLine().apply_domain(Schedule_);
+  isl::union_map IterToLine =
+      Program_.getAccessToLine().apply_domain(Schedule_);
   IterToLine = IterToLine.coalesce();
 
   // get the successor maps
@@ -182,11 +193,16 @@ void HayStack::computeGlobalMaps() {
   SameLineSucc_ = SameLineSucc_.coalesce();
 
   // compute the before and forward maps
-  Before_ = Schedule_.apply_range(LexSuccEq_.reverse()).apply_range(Schedule_.reverse()).coalesce();
-  Forward_ = Schedule_.apply_range(LexSuccEq_).apply_range(Schedule_.reverse()).coalesce();
+  Before_ = Schedule_.apply_range(LexSuccEq_.reverse())
+                .apply_range(Schedule_.reverse())
+                .coalesce();
+  Forward_ = Schedule_.apply_range(LexSuccEq_)
+                 .apply_range(Schedule_.reverse())
+                 .coalesce();
   Timer::stopTimer("ComputeBetweenMap");
 
-  // compute the first map that connects the every memory location to the schedule value that loads it first
+  // compute the first map that connects the every memory location to the
+  // schedule value that loads it first
   First_ = Program_.getAccessToLine().reverse().apply_range(Schedule_).lexmin();
   First_ = Schedule_.apply_range(First_.reverse());
   First_ = First_.coalesce();
@@ -203,7 +219,8 @@ void HayStack::extractAccesses() {
       isl::set Domain = Schedule_.domain().extract_set(Set.get_space());
       Domain = Domain.fix_si(isl::dim::set, Domain.dim(isl::dim::set) - 1, i);
       // create the access
-      Access Current(AccessInfos[i].Name, MachineModel_, ModelOptions_, Domain, Program_.getElementSizes());
+      Access Current(AccessInfos[i].Name, MachineModel_, ModelOptions_, Domain,
+                     Program_.getElementSizes());
       Accesses_.push_back(Current);
     }
     return isl::stat::ok();
@@ -223,9 +240,12 @@ void HayStack::addConflicts(isl::union_map Next) {
           Conflicts_[Source.getName()].push_back(Destination.getName());
         }
       }
-      std::sort(Conflicts_[Source.getName()].begin(), Conflicts_[Source.getName()].end());
-      auto Last = std::unique(Conflicts_[Source.getName()].begin(), Conflicts_[Source.getName()].end());
-      Conflicts_[Source.getName()].erase(Last, Conflicts_[Source.getName()].end());
+      std::sort(Conflicts_[Source.getName()].begin(),
+                Conflicts_[Source.getName()].end());
+      auto Last = std::unique(Conflicts_[Source.getName()].begin(),
+                              Conflicts_[Source.getName()].end());
+      Conflicts_[Source.getName()].erase(Last,
+                                         Conflicts_[Source.getName()].end());
     }
   }
 #endif
