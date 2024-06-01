@@ -47,8 +47,7 @@ struct ProgramParameters {
   std::vector<std::string> IncludePath;
   std::vector<std::string> DefineParameters;
   std::string ScopFunction;
-  bool ComputeBounds;
-  // std::vector<NamedLong> Parameters;
+  bool ComputeBounds; 
 
   ProgramParameters() = delete;
 
@@ -70,15 +69,16 @@ struct CacheMissResults {
   machine_model MachineModel;
   model_options ModelOptions;
   HayStack Model;
+  long long TotalFlopCount_;
   std::vector<NamedMisses> CacheMisses;
 
-  CacheMissResults(long totalcompulsory, long toatlaccesses,
+  CacheMissResults(long totalcompulsory, long totalaccesses,
                    std::vector<long> totalcapacity, machine_model mm,
-                   model_options mo, HayStack model,
+                   model_options mo, HayStack model, long long totalflopcount,
                    std::vector<NamedMisses> cm)
-      : TotalCompulsory(totalcompulsory), TotalAccesses(toatlaccesses),
+      : TotalCompulsory(totalcompulsory), TotalAccesses(totalaccesses),
         TotalCapacity(totalcapacity), MachineModel(mm), ModelOptions(mo),
-        Model(model), CacheMisses(cm) {}
+        Model(model), TotalFlopCount_(totalflopcount) ,CacheMisses(cm) {}
 };
 
 std::vector<NamedLong>

@@ -36,6 +36,7 @@ public:
     return AccessInfos_;
   }
   std::pair<unsigned, unsigned> getScopLoc() const { return ScopLoc_; };
+  long long getTotalFlopCount() const { return TotalFlopCount_; }
 
 private:
   void extractReferences();
@@ -69,6 +70,7 @@ private:
   std::pair<unsigned, unsigned> ScopLoc_;
   std::map<std::string, std::vector<access_info>> AccessInfos_;
   std::unordered_map<std::string, unsigned> AccessMapStmt; 
+  long long TotalFlopCount_;
 };
 
 #endif
