@@ -1,20 +1,8 @@
 // /******************************************************************************
 //  *              libbullseye -  A library version of Bullseye *
 //  ******************************************************************************/
-// /*
-//  * Copyright (c) 2022, BullsEye
-//    Adopted from HayStack (PLDI 2019)
-// */
 
-// #include<iostream>
-
-// void bullseye(){
-//   std::cout<<"Hey from bullseye " << std::endl;
-// }
-
-#include <algorithm>
-// #include <boost/algorithm/string.hpp>
-// #include <boost/program_options.hpp>
+#include <algorithm> 
 #include <chrono>
 #include <fstream>
 #include <iomanip>
@@ -27,7 +15,7 @@
 #include <isl/options.h>
 
 #include "Definitions.h"
-#include "HayStack.h"
+#include "HayStack.h" 
 #include "Timer.h"
 #include "bullseyelib.h"
 
@@ -228,6 +216,8 @@ void printCacheMissResults(ProgramParameters PP, CacheMissResults CMR) {
   }
   std::cout << std::setw(16) << std::left << "total:";
   std::cout << std::setw(20) << std::right << CMR.TotalAccesses << std::endl;
+  std::cout << std::setw(16) << std::left << "flops:";
+  std::cout << std::setw(20) << std::right << CMR.TotalFlopCount_ << std::endl;
   std::cout << DoubleLine << std::endl;
 }
 
@@ -288,7 +278,7 @@ CacheMissResults run_model_new(isl::ctx Context, ProgramParameters PP) {
                    TotalCapacity.begin(), std::plus<long>());
   };
   CacheMissResults CMR(TotalCompulsory, TotalAccesses, TotalCapacity,
-                       MachineModel, ModelOptions, Model, CacheMisses);
+                       MachineModel, ModelOptions, Model, Model.countFlops(), CacheMisses);
   printCacheMissResults(PP, CMR);
   return CMR;
 }

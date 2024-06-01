@@ -44,6 +44,7 @@ public:
   // count the actual performance info
   std::vector<NamedMisses> countCacheMisses();
   std::vector<NamedVector> countCacheMisses(std::vector<long> CacheSizes);
+  long long countFlops();
 
   std::vector<Access> getAccesses() const { return Accesses_; }
   std::map<std::string, std::vector<std::string>> getConflicts() const {

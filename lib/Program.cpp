@@ -24,6 +24,8 @@ void Program::extractScop(std::string SourceFile, std::string ScopFunction) {
   Reads_ = isl::manage(pet_scop_get_tagged_may_reads(PetScop));
   Writes_ = isl::manage(pet_scop_get_tagged_may_writes(PetScop));
 
+  static unsigned stmt_read_count = 0; 
+
   // check if the schedule is bounded
   auto checkIfBounded = [](isl::set Set) {
     if (!Set.is_bounded()) {
@@ -56,8 +58,13 @@ void Program::extractScop(std::string SourceFile, std::string ScopFunction) {
     pet_expr *Expression = pet_tree_expr_get_expr(PetScop->stmts[idx]->body);
     isl::space Space = isl::manage(pet_stmt_get_space(PetScop->stmts[idx]));
     std::string Statement = Space.get_tuple_name(isl::dim::set);
+    long int fcount = cardinality(isl::manage(isl_set_copy(PetScop->stmts[idx]->domain)));
+
     // extract the access info
     auto printExpression = [](__isl_keep pet_expr *Expr, void *User) {
+      if(pet_expr_access_is_read(Expr)){ 
+        stmt_read_count++; 
+      } 
       if (pet_expr_access_is_read(Expr) || pet_expr_access_is_write(Expr)) {
         isl::id RefId = isl::manage(pet_expr_access_get_ref_id(Expr));
         std::string Name = RefId.to_str();
@@ -97,6 +104,12 @@ void Program::extractScop(std::string SourceFile, std::string ScopFunction) {
     };
     pet_expr_foreach_access_expr(Expression, printExpression,
                                  &AccessInfos_[Statement]);
+
+    AccessMapStmt[Statement] = stmt_read_count-1;
+    if(AccessMapStmt[Statement]!=-1) { 
+      TotalFlopCount_ += fcount*AccessMapStmt[Statement];
+    } 
+
     // get the line number
     pet_loc *Loc = pet_tree_get_loc(PetScop->stmts[idx]->body);
     int Line = pet_loc_get_line(Loc);

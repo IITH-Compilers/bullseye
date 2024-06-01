@@ -8,6 +8,7 @@
 #include "pet.h"
 #include <isl/isl-noexceptions.h>
 #include <map>
+#include <unordered_map>
 #include <string>
 
 #include "Definitions.h"
@@ -35,6 +36,7 @@ public:
     return AccessInfos_;
   }
   std::pair<unsigned, unsigned> getScopLoc() const { return ScopLoc_; };
+  long long getTotalFlopCount() const { return TotalFlopCount_; }
 
 private:
   void extractReferences();
@@ -67,6 +69,8 @@ private:
   // location info for scop and memory accesses
   std::pair<unsigned, unsigned> ScopLoc_;
   std::map<std::string, std::vector<access_info>> AccessInfos_;
+  std::unordered_map<std::string, unsigned> AccessMapStmt; 
+  long long TotalFlopCount_;
 };
 
 #endif
