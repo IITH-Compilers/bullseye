@@ -1,16 +1,3 @@
-// /*
-//  * Copyright (c) 2022, BullsEye
-//    Adopted from HayStack (PLDI 2019)
-// */
-
-// #include<iostream>
-// #include"lib/bullseyelib.h"
-// int main() {
-//   std::cout <<" Hey this is the main function" << std::endl;
-//   bullseye();
-//   return 0;
-// }
-
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
 #include <boost/program_options.hpp>

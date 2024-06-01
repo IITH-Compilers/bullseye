@@ -2,7 +2,7 @@
 //  *              libbullseye -  A library version of Bullseye *
 //  ******************************************************************************/
 
-#include <algorithm> 
+#include <algorithm>
 #include <chrono>
 #include <fstream>
 #include <iomanip>

@@ -1,7 +1,7 @@
 # Bullseye
 
 The BullsEye cache model is an analytical tool that calculates the number of cache misses for a given affine program.
-BullsEye is developed by the IITH Compilers group and adopted from HayStack (https://dl.acm.org/doi/10.1145/3314221.3314606 appeared in PLDI 2019).
+BullsEye is developed by the IITH Compilers group, and the cache model is based on implementation from HayStack (https://dl.acm.org/doi/10.1145/3314221.3314606 appeared in PLDI 2019).
 
 ## Installation
 
