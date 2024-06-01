@@ -1,20 +1,9 @@
 // /******************************************************************************
 //  *              libbullseye -  A library version of Bullseye *
 //  ******************************************************************************/
-// /*
-//  * Copyright (c) 2022, BullsEye
-//    Adopted from HayStack (PLDI 2019)
-// */
-
-// #include<iostream>
-
-// void bullseye(){
-//   std::cout<<"Hey from bullseye " << std::endl;
-// }
+ 
 
 #include <algorithm>
-// #include <boost/algorithm/string.hpp>
-// #include <boost/program_options.hpp>
 #include <chrono>
 #include <fstream>
 #include <iomanip>
