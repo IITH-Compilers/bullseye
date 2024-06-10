@@ -70,7 +70,7 @@ private:
   std::pair<unsigned, unsigned> ScopLoc_;
   std::map<std::string, std::vector<access_info>> AccessInfos_;
   std::unordered_map<std::string, unsigned> AccessMapStmt; 
-  long long TotalFlopCount_;
+  long long TotalFlopCount_ = 0;
 };
 
 #endif
