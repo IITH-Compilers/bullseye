@@ -25,6 +25,7 @@ void Program::extractScop(std::string SourceFile, std::string ScopFunction) {
   Writes_ = isl::manage(pet_scop_get_tagged_may_writes(PetScop));
 
   static unsigned stmt_read_count = 0; 
+  TotalFlopCount_ = 0;
 
   // check if the schedule is bounded
   auto checkIfBounded = [](isl::set Set) {
@@ -106,9 +107,10 @@ void Program::extractScop(std::string SourceFile, std::string ScopFunction) {
                                  &AccessInfos_[Statement]);
 
     AccessMapStmt[Statement] = stmt_read_count-1;
-    if(AccessMapStmt[Statement]!=-1) { 
-      TotalFlopCount_ += fcount*AccessMapStmt[Statement];
+    if(AccessMapStmt[Statement]!=-1) {  
+      TotalFlopCount_ += fcount*AccessMapStmt[Statement]; 
     } 
+    stmt_read_count = 0;
 
     // get the line number
     pet_loc *Loc = pet_tree_get_loc(PetScop->stmts[idx]->body);
