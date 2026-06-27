@@ -216,7 +216,7 @@ std::vector<long> Access::countCapacityMisses(std::vector<long> CacheSizes) {
   for (auto &Piece : NonAffine_approx_) {
 
     auto misses_total = BullsEye::calculateApproximateCapacityMisses(
-        Piece, Affine_dims, NonAffine_dims, Limits);
+        Piece, NonAffine_dims, Affine_dims, Limits, ModelOptions_);
     std::transform(Results.begin(), Results.end(), misses_total.begin(),
                    Results.begin(), std::plus<long>());
   }

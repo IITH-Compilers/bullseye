@@ -224,7 +224,11 @@ void printCacheMissResults(ProgramParameters PP, CacheMissResults CMR) {
 CacheMissResults run_model_new(isl::ctx Context, ProgramParameters PP) {
   // allocate the machine model with default values
   machine_model MachineModel = {PP.LineSize, PP.CacheSizes};
-  model_options ModelOptions = {PP.ComputeBounds};
+  model_options ModelOptions;
+  ModelOptions.ComputeBounds = PP.ComputeBounds;
+  ModelOptions.SparseSpan = PP.SparseSpan;
+  ModelOptions.UseHandelmanOctagon = PP.UseHandelmanOctagon;
+  ModelOptions.UseInterval = PP.UseInterval;
   printf("-> setting up cache levels\n");
   std::sort(MachineModel.CacheSizes.begin(), MachineModel.CacheSizes.end());
   for (auto CacheSize : MachineModel.CacheSizes) {

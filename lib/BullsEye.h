@@ -83,11 +83,42 @@ public:
   static void setcolumn(std::string bmask, int column, long long coeff,
                         std::vector<std::vector<long>> &hm);
 
-  // compute approximate capacity misses
+  // compute approximate capacity misses. The approximation strategy is selected
+  // by `Options` (sparse-enumeration span, Handelman-octagon and interval LP
+  // approximations), populated from the command-line flags.
   static std::vector<long>
   calculateApproximateCapacityMisses(piece Piece, std::vector<int> NonAffine,
                                      std::vector<int> Affine,
-                                     std::vector<long> cache_size);
+                                     std::vector<long> cache_size,
+                                     model_options Options);
+
+private:
+  // Type of octagonal/interval constraint produced by the shared LP solver.
+  enum class LPBoundMode {
+    Interval, // single-variable interval bound  (pins one coefficient to 0)
+    Positive, // octagon bound  x_i - x_j        (equal coefficients)
+    Negative  // octagon bound  x_i + x_j        (opposite coefficients)
+  };
+
+  // Shared implementation behind findLPIntervalBounds / findLPBounds /
+  // findLPBoundsNeg. All three only differ in the single octagonal constraint
+  // that is added to the model; everything else (objective, non-affine
+  // cancellation constraints, solution extraction) is identical.
+  static struct oct
+  solveLPBounds(LPBoundMode mode, int index1, int index2, int boundtype1,
+                int boundtype2, int varsize, int psize,
+                std::vector<std::vector<long>> &transpose, long limit,
+                std::vector<std::vector<long>> &hmatrix);
+
+  // Hardcoded mapping from a per-term exponent bitmask to its Handelman-matrix
+  // row index. Built once and reused (replaces the former if/else cascade).
+  static const std::map<std::string, int> &handelmanRowTable();
+
+  // Exact fallback used when the Handelman-octagon approximation is disabled:
+  // enumerates every point of `Domain` and counts those whose stack distance
+  // (given by `Poly`) exceeds `limit`.
+  static long exactCountMisses(isl::set Domain, isl::qpolynomial Poly,
+                               long limit);
 };
 
 #endif

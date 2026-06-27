@@ -4,7 +4,9 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdlib>
 #include <limits>
+#include <string>
 
 #include "Access.h"
 #include "BullsEye.h"
@@ -55,11 +57,18 @@ BullsEye::_combinations_(isl_pw_qpolynomial *poly, int N, int K,
   return temp;
 }
 
-// Return set of Interval constraints
-struct oct BullsEye::findLPIntervalBounds(
-    int index1, int index2, int boundtype1, int boundtype2, int varsize,
-    int psize, std::vector<std::vector<long>> &transpose, long limit,
-    std::vector<std::vector<long>> &hmatrix) {
+// Shared LP back-end for the interval / positive-octagon / negative-octagon
+// bound computations. Solved with the CPLEX LP solver. The three former
+// functions (findLPIntervalBounds, findLPBounds, findLPBoundsNeg) were
+// byte-for-byte identical except for the single octagonal constraint added to
+// the model, so they now delegate here and only select an LPBoundMode.
+struct oct BullsEye::solveLPBounds(LPBoundMode mode, int index1, int index2,
+                                   int boundtype1, int boundtype2, int varsize,
+                                   int psize,
+                                   std::vector<std::vector<long>> &transpose,
+                                   long limit,
+                                   std::vector<std::vector<long>> &hmatrix) {
+  (void)limit; // retained for API compatibility; unused by the LP model
 
   struct oct constraint;
   constraint.constant = 0;
@@ -82,38 +91,49 @@ struct oct BullsEye::findLPIntervalBounds(
   exp0 += boundtype2 * transpose[sizetrans - 1][index2 + 1];
   model.add(IloMinimize(env, exp0));
   IloExpr cons0(env, 0);
-  IloIntExpr cons1(env, 1);
-  IloIntExpr consNeg(env, -1);
 
-  // Add Constraints
-  // First constraints to cancel the non-affine terms
-  for (int s = varsize + 1; s < hmatrix.size(); s++) {
+  // Constraints to cancel the non-affine terms
+  for (int s = varsize + 1; s < (int)hmatrix.size(); s++) {
     IloExpr exp1(env);
-    for (int d = 0; d < hmatrix[s].size() - 1; d++) {
+    for (int d = 0; d < (int)hmatrix[s].size() - 1; d++) {
       exp1 += x[d] * hmatrix[s][d];
     }
     exp1 += hmatrix[s][hmatrix[s].size() - 1];
     model.add(exp1 == cons0);
   }
 
-  // Add constraints for Octagons
+  // Build the two coefficient expressions for the selected variable pair.
   IloExpr exp2(env);
-  for (int d = 0; d < hmatrix[index1 + 1].size() - 1; d++) {
+  for (int d = 0; d < (int)hmatrix[index1 + 1].size() - 1; d++) {
     exp2 += x[d] * hmatrix[index1 + 1][d];
   }
   exp2 += hmatrix[index1 + 1][hmatrix[index1 + 1].size() - 1];
 
   IloExpr exp3(env);
-  for (int d = 0; d < hmatrix[index2 + 1].size() - 1; d++) {
+  for (int d = 0; d < (int)hmatrix[index2 + 1].size() - 1; d++) {
     exp3 += x[d] * hmatrix[index2 + 1][d];
   }
   exp3 += hmatrix[index2 + 1][hmatrix[index2 + 1].size() - 1];
-  model.add(exp3 == cons0);
 
+  // The only difference between the three original routines: which octagonal
+  // constraint links the coefficient expressions.
+  switch (mode) {
+  case LPBoundMode::Interval:
+    model.add(exp3 == cons0); // pin the second coefficient -> interval bound
+    break;
+  case LPBoundMode::Positive:
+    model.add(exp3 == exp2); // x_i - x_j octagon
+    break;
+  case LPBoundMode::Negative:
+    model.add(exp2 == -exp3); // x_i + x_j octagon
+    break;
+  }
+
+  // Non-negativity of the Handelman multipliers.
   for (int i = 0; i < psize - 1; i++) {
-    IloExpr exp2(env);
-    exp2 += x[i];
-    model.add(exp2 >= cons0);
+    IloExpr nn(env);
+    nn += x[i];
+    model.add(nn >= cons0);
   }
 
   IloCplex cplex(model);
@@ -135,13 +155,13 @@ struct oct BullsEye::findLPIntervalBounds(
     cplex.getValues(vals, x);
     for (int i = 1; i <= varsize; i++) {
       double const1 = 0;
-      for (int d = 0; d < hmatrix[i].size() - 1; d++) {
+      for (int d = 0; d < (int)hmatrix[i].size() - 1; d++) {
         const1 += vals[d] * hmatrix[i][d];
       }
       const1 += hmatrix[i][hmatrix[i].size() - 1];
       constraint.coeff[i] = const1;
     }
-    for (int d = 0; d < hmatrix[0].size() - 1; d++) {
+    for (int d = 0; d < (int)hmatrix[0].size() - 1; d++) {
       bounds += vals[d] * hmatrix[0][d];
     }
     bounds += hmatrix[0][hmatrix[0].size() - 1];
@@ -149,6 +169,15 @@ struct oct BullsEye::findLPIntervalBounds(
   }
   env.end();
   return constraint;
+}
+
+// Return set of Interval constraints
+struct oct BullsEye::findLPIntervalBounds(
+    int index1, int index2, int boundtype1, int boundtype2, int varsize,
+    int psize, std::vector<std::vector<long>> &transpose, long limit,
+    std::vector<std::vector<long>> &hmatrix) {
+  return solveLPBounds(LPBoundMode::Interval, index1, index2, boundtype1,
+                       boundtype2, varsize, psize, transpose, limit, hmatrix);
 }
 
 // Return set of octagonal constraints for Positive bounds
@@ -157,94 +186,8 @@ struct oct BullsEye::findLPBounds(int index1, int index2, int boundtype1,
                                   std::vector<std::vector<long>> &transpose,
                                   long limit,
                                   std::vector<std::vector<long>> &hmatrix) {
-  struct oct constraint;
-  constraint.constant = 0;
-  IloEnv env;
-  IloModel model(env);
-  IloFloatVarArray x(env, psize - 1, 0, IloInfinity, ILOFLOAT);
-
-  // Objective function
-  IloExpr exp0(env);
-  int sizetrans = transpose.size();
-  for (int s = 0; s < sizetrans - 1; s++) {
-    int temp = 0;
-    temp += transpose[s][0];
-    temp += boundtype1 * transpose[s][index1 + 1];
-    temp += boundtype2 * transpose[s][index2 + 1];
-    exp0 += x[s] * temp;
-  }
-  exp0 += transpose[sizetrans - 1][0];
-  exp0 += boundtype1 * transpose[sizetrans - 1][index1 + 1];
-  exp0 += boundtype2 * transpose[sizetrans - 1][index2 + 1];
-  model.add(IloMinimize(env, exp0));
-  IloExpr cons0(env, 0);
-  IloIntExpr cons1(env, 1);
-  IloIntExpr consNeg(env, -1);
-
-  // Add Constraints
-  // First constraints to cancel the non-affine terms
-  for (int s = varsize + 1; s < hmatrix.size(); s++) {
-    IloExpr exp1(env);
-    for (int d = 0; d < hmatrix[s].size() - 1; d++) {
-      exp1 += x[d] * hmatrix[s][d];
-    }
-    exp1 += hmatrix[s][hmatrix[s].size() - 1];
-    model.add(exp1 == cons0);
-  }
-
-  // Add constraints for Octagons
-  IloExpr exp2(env);
-  for (int d = 0; d < hmatrix[index1 + 1].size() - 1; d++) {
-    exp2 += x[d] * hmatrix[index1 + 1][d];
-  }
-  exp2 += hmatrix[index1 + 1][hmatrix[index1 + 1].size() - 1];
-
-  IloExpr exp3(env);
-  for (int d = 0; d < hmatrix[index2 + 1].size() - 1; d++) {
-    exp3 += x[d] * hmatrix[index2 + 1][d];
-  }
-  exp3 += hmatrix[index2 + 1][hmatrix[index2 + 1].size() - 1];
-  model.add(exp3 == exp2);
-
-  for (int i = 0; i < psize - 1; i++) {
-    IloExpr exp2(env);
-    exp2 += x[i];
-    model.add(exp2 >= cons0);
-  }
-
-  IloCplex cplex(model);
-  cplex.setOut(env.getNullStream());
-  cplex.extract(model);
-
-  cplex.solve();
-  exp0.end();
-  exp2.end();
-  exp3.end();
-
-  if (cplex.getStatus() == IloAlgorithm::Infeasible) {
-    return constraint;
-  }
-  double bounds = 0;
-
-  if (cplex.getStatus() == IloAlgorithm::Optimal) {
-    IloFloatArray vals(env);
-    cplex.getValues(vals, x);
-    for (int i = 1; i <= varsize; i++) {
-      double const1 = 0;
-      for (int d = 0; d < hmatrix[i].size() - 1; d++) {
-        const1 += vals[d] * hmatrix[i][d];
-      }
-      const1 += hmatrix[i][hmatrix[i].size() - 1];
-      constraint.coeff[i] = const1;
-    }
-    for (int d = 0; d < hmatrix[0].size() - 1; d++) {
-      bounds += vals[d] * hmatrix[0][d];
-    }
-    bounds += hmatrix[0][hmatrix[0].size() - 1];
-    constraint.constant = ceil(bounds);
-  }
-  env.end();
-  return constraint;
+  return solveLPBounds(LPBoundMode::Positive, index1, index2, boundtype1,
+                       boundtype2, varsize, psize, transpose, limit, hmatrix);
 }
 
 // Return set of octagonal constraints for negative bounds
@@ -253,99 +196,16 @@ struct oct BullsEye::findLPBoundsNeg(int index1, int index2, int boundtype1,
                                      std::vector<std::vector<long>> &transpose,
                                      long limit,
                                      std::vector<std::vector<long>> &hmatrix) {
-  struct oct constraint;
-  constraint.constant = 0;
-  IloEnv env;
-  IloModel model(env);
-  IloFloatVarArray x(env, psize - 1, 0, IloInfinity, ILOFLOAT);
-
-  // Objective function
-  IloExpr exp0(env);
-  int sizetrans = transpose.size();
-  for (int s = 0; s < sizetrans - 1; s++) {
-    int temp = 0;
-    temp += transpose[s][0];
-    temp += boundtype1 * transpose[s][index1 + 1];
-    temp += boundtype2 * transpose[s][index2 + 1];
-    exp0 += x[s] * temp;
-  }
-  exp0 += transpose[sizetrans - 1][0];
-  exp0 += boundtype1 * transpose[sizetrans - 1][index1 + 1];
-  exp0 += boundtype2 * transpose[sizetrans - 1][index2 + 1];
-  model.add(IloMinimize(env, exp0));
-  IloExpr cons0(env, 0);
-  IloIntExpr cons1(env, 1);
-  IloIntExpr consNeg(env, -1);
-
-  // Add Constraints
-  // First constraints to cancel the non-affine terms
-  for (int s = varsize + 1; s < hmatrix.size(); s++) {
-    IloExpr exp1(env);
-    for (int d = 0; d < hmatrix[s].size() - 1; d++) {
-      exp1 += x[d] * hmatrix[s][d];
-    }
-    exp1 += hmatrix[s][hmatrix[s].size() - 1];
-    model.add(exp1 == cons0);
-  }
-
-  // Add constraints for Octagons
-  IloExpr exp2(env);
-  for (int d = 0; d < hmatrix[index1 + 1].size() - 1; d++) {
-    exp2 += x[d] * hmatrix[index1 + 1][d];
-  }
-  exp2 += hmatrix[index1 + 1][hmatrix[index1 + 1].size() - 1];
-
-  IloExpr exp3(env);
-  for (int d = 0; d < hmatrix[index2 + 1].size() - 1; d++) {
-    exp3 += x[d] * hmatrix[index2 + 1][d];
-  }
-  exp3 += hmatrix[index2 + 1][hmatrix[index2 + 1].size() - 1];
-  model.add(exp2 == -exp3);
-
-  for (int i = 0; i < psize - 1; i++) {
-    IloExpr exp2(env);
-    exp2 += x[i];
-    model.add(exp2 >= cons0);
-  }
-
-  IloCplex cplex(model);
-  cplex.setOut(env.getNullStream());
-  cplex.extract(model);
-
-  cplex.solve();
-
-  if (cplex.getStatus() == IloAlgorithm::Infeasible) {
-    return constraint;
-  }
-  double bounds = 0;
-
-  if (cplex.getStatus() == IloAlgorithm::Optimal) {
-    IloFloatArray vals(env);
-    cplex.getValues(vals, x);
-    for (int i = 1; i <= varsize; i++) {
-      double const1 = 0;
-      for (int d = 0; d < hmatrix[i].size() - 1; d++) {
-        const1 += vals[d] * hmatrix[i][d];
-      }
-      const1 += hmatrix[i][hmatrix[i].size() - 1];
-      constraint.coeff[i] = const1;
-    }
-    for (int d = 0; d < hmatrix[0].size() - 1; d++) {
-      bounds += vals[d] * hmatrix[0][d];
-    }
-    bounds += hmatrix[0][hmatrix[0].size() - 1];
-    constraint.constant = ceil(bounds);
-  }
-  env.end();
-  return constraint;
+  return solveLPBounds(LPBoundMode::Negative, index1, index2, boundtype1,
+                       boundtype2, varsize, psize, transpose, limit, hmatrix);
 }
 
 std::vector<isl::constraint> constraint_list;
 
 // Return factorial of a integer
 long BullsEye::_factorial_(long n) {
-  int res = 1;
-  for (int i = 2; i <= n; i++)
+  long res = 1;
+  for (long i = 2; i <= n; i++)
     res = res * i;
   return res;
 }
@@ -559,7 +419,12 @@ isl_stat BullsEye::vertex_count_interval(__isl_take isl_vertex *vertex,
 }
 
 int ver_num = 0;
-std::vector<bool> count_poly(10, 0);
+// Per-domain record of whether each vertex's stack distance exceeds the cache.
+// Grown dynamically (one entry per vertex) so it works for polytopes with any
+// number of vertices and so the "all vertices agree" shortcut tests exactly the
+// vertices that were visited (the former fixed size of 10 both overflowed for
+// large polytopes and polluted the shortcut with unused trailing entries).
+std::vector<bool> count_poly;
 
 // Test a input vertex for a cache miss
 isl_stat BullsEye::vertex_test(__isl_take isl_vertex *vertex, void *user) {
@@ -585,10 +450,7 @@ isl_stat BullsEye::vertex_test(__isl_take isl_vertex *vertex, void *user) {
   isl::val StackDistance =
       isl::manage(isl_pw_qpolynomial_eval(poly.release(), Point.release()));
 
-  if (isl::get_value(StackDistance) > cache_size)
-    count_poly[ver_num] = true;
-  else
-    count_poly[ver_num] = false;
+  count_poly.push_back(isl::get_value(StackDistance) > cache_size);
   ver_num++;
 
   mv.release();
@@ -599,21 +461,38 @@ isl_stat BullsEye::vertex_test(__isl_take isl_vertex *vertex, void *user) {
   return isl_stat_ok;
 }
 
+// Exact fallback used when the Handelman-octagon approximation is disabled:
+// enumerate every point of the domain and count those whose stack distance
+// (given by the polynomial) exceeds the cache limit.
+long BullsEye::exactCountMisses(isl::set Domain, isl::qpolynomial Poly,
+                                long limit) {
+  long count = 0;
+  isl::pw_qpolynomial pw =
+      isl::manage(isl_pw_qpolynomial_from_qpolynomial(Poly.copy()));
+  auto countPoint = [&](isl::point Point) {
+    isl::val StackDistance =
+        isl::manage(isl_pw_qpolynomial_eval(pw.copy(), Point.copy()));
+    if (isl::get_value(StackDistance) > limit)
+      count++;
+    return isl::stat::ok();
+  };
+  Domain.foreach_point(countPoint);
+  return count;
+}
+
 // Count Approximate cache misses using Handelman-Octagon counting of stack
 // distance polynomials
 std::vector<long> BullsEye::calculateApproximateCapacityMisses(
     piece Piece, std::vector<int> NonAffine, std::vector<int> Affine,
-    std::vector<long> cache_size) {
+    std::vector<long> cache_size, model_options Options) {
 
   isl::pw_qpolynomial _polynomial =
       isl::manage(isl_pw_qpolynomial_from_qpolynomial(
           isl_qpolynomial_copy(Piece.Polynomial.get())));
-  ;
   isl::set input_domain = isl::manage(isl_set_copy(Piece.Domain.get()));
   isl::pw_aff expression;
   std::vector<long> Misses;
 
-  bool interval_bounds = false;
   isl_set *trial_set_new = input_domain.release();
   isl_ctx *ctx = isl_set_get_ctx(trial_set_new);
 
@@ -625,7 +504,9 @@ std::vector<long> BullsEye::calculateApproximateCapacityMisses(
   long long totalMissCount = 0;
   long long cache_misses = 0;
   int cache_number = 0;
-  unsigned enum_length = 25;
+  // Sparse-enumeration span (set by --sparse-span). A span of 1 means dense /
+  // exact enumeration; larger values sample one point in every `enum_length`.
+  const unsigned enum_length = (unsigned)std::max<long>(1, Options.SparseSpan);
 
   // For each cache level
   for (auto cache_limit : cache_size) {
@@ -668,9 +549,13 @@ std::vector<long> BullsEye::calculateApproximateCapacityMisses(
                   [&enum_length](auto &c) { return c * enum_length; });
               cache_misses += Misses[cache_number];
             }
-          } else {
-            iterCount++;
           }
+          // Advance on every point so that exactly one point in every
+          // `enum_length` is sampled and scaled by the span. The original code
+          // only incremented inside the else branch, so the counter never left
+          // zero, every point was processed and scaled, and the result was
+          // overcounted by a factor of enum_length.
+          iterCount++;
           return isl::stat::ok();
         };
 
@@ -683,6 +568,19 @@ std::vector<long> BullsEye::calculateApproximateCapacityMisses(
       cache_number++;
 
     } else {
+
+      // Low-dimensional pieces use an LP sub-polyhedral approximation selected
+      // by the flags: interval (--interval-bounds) takes precedence, otherwise
+      // Handelman-octagon (--handelman-octagon). If neither is enabled, fall
+      // back to exact point enumeration of the piece.
+      const bool useInterval = Options.UseInterval;
+      const bool useOctagon = !useInterval && Options.UseHandelmanOctagon;
+      if (!useInterval && !useOctagon) {
+        long misses = exactCountMisses(Piece.Domain, Piece.Polynomial, cache_limit);
+        Misses.push_back(misses);
+        cache_number++;
+        continue;
+      }
 
       totalMissCount = 0;
       isl::qpolynomial tqp, tempqp;
@@ -725,13 +623,17 @@ std::vector<long> BullsEye::calculateApproximateCapacityMisses(
       for (auto &Domain_c : domains) {
 
         ver_num = 0;
+        count_poly.clear();
         isl::basic_set Domain_ = Domain_c.remove_divs();
-        if (!interval_bounds) {
+        {
           isl_vertices *ver = isl_basic_set_compute_vertices(Domain_.get());
           struct check_poly data3 = {_polynomial, Domain_c, cache_limit};
           isl_vertices_foreach_vertex(ver, &vertex_test, &data3);
           isl_vertices_free(ver);
-          if (std::adjacent_find(count_poly.begin(), count_poly.end(),
+          // Shortcut: if every vertex agrees (all miss, or all hit), the whole
+          // domain is decided exactly. Guard against an empty vertex set.
+          if (!count_poly.empty() &&
+              std::adjacent_find(count_poly.begin(), count_poly.end(),
                                  std::not_equal_to<>()) == count_poly.end()) {
             if (count_poly[0] == false) {
               totalMissCount = 0;
@@ -816,80 +718,90 @@ std::vector<long> BullsEye::calculateApproximateCapacityMisses(
           isl::basic_set init_bset = isl::basic_set::universe(sp);
           isl::local_space ls =
               isl::manage(isl_local_space_from_space(sp.release()));
-          // Find Octagon Bounds
-          if (!interval_bounds && (isl_set_n_dim(trial_set) == 2)) {
-            struct data_poly data = {0,         1,     dims,    products_size,
-                                     transpose, limit, hmatrix, ls};
-            isl_vertices *verts =
-                isl_basic_set_compute_vertices(Domain_.release());
-            isl_vertices_foreach_vertex(verts, vertex_count, &data);
-            isl_vertices_free(verts);
-            for (auto con : constraint_list) {
-              init_bset = isl::manage(isl_basic_set_add_constraint(
-                  init_bset.release(), con.release()));
+          // Select the LP sub-polyhedral approximation. Exactly one of
+          // `useInterval` / `useOctagon` is true here (the neither-case took the
+          // exact-enumeration shortcut above). Interval bounds pin a single
+          // coefficient per vertex pass; octagon bounds relate variable pairs.
+          // 2-D domains use one octagon / two interval passes; 3-D domains use
+          // three passes for both. Domains of other dimensions are left for the
+          // exact vertex-agreement shortcut and produce no extra constraints.
+          if (useInterval) {
+            if (isl_set_n_dim(trial_set) == 2) {
+              struct data_poly data = {0,         1,     dims,    products_size,
+                                       transpose, limit, hmatrix, ls};
+              isl_vertices *verts =
+                  isl_basic_set_compute_vertices(Domain_.get());
+              isl_vertices_foreach_vertex(verts, vertex_count_interval, &data);
+              isl_vertices_free(verts);
+              isl_vertices *verts2 =
+                  isl_basic_set_compute_vertices(Domain_.release());
+              struct data_poly data2 = {1,         0,     dims,    products_size,
+                                        transpose, limit, hmatrix, ls};
+              isl_vertices_foreach_vertex(verts2, vertex_count_interval, &data2);
+              isl_vertices_free(verts2);
+              for (auto con : constraint_list) {
+                init_bset = isl::manage(isl_basic_set_add_constraint(
+                    init_bset.release(), con.release()));
+              }
+            } else if (isl_set_n_dim(trial_set) == 3) {
+              struct data_poly data = {0,         1,     dims,    products_size,
+                                       transpose, limit, hmatrix, ls};
+              isl_vertices *verts =
+                  isl_basic_set_compute_vertices(Domain_.get());
+              isl_vertices_foreach_vertex(verts, vertex_count_interval, &data);
+              isl_vertices_free(verts);
+              isl_vertices *verts2 =
+                  isl_basic_set_compute_vertices(Domain_.get());
+              struct data_poly data2 = {1,         2,     dims,    products_size,
+                                        transpose, limit, hmatrix, ls};
+              isl_vertices_foreach_vertex(verts2, vertex_count_interval, &data2);
+              isl_vertices_free(verts2);
+              isl_vertices *verts3 =
+                  isl_basic_set_compute_vertices(Domain_.release());
+              struct data_poly data3 = {2,         0,     dims,    products_size,
+                                        transpose, limit, hmatrix, ls};
+              isl_vertices_foreach_vertex(verts3, vertex_count_interval, &data3);
+              isl_vertices_free(verts3);
+              for (auto con : constraint_list) {
+                init_bset = isl::manage(isl_basic_set_add_constraint(
+                    init_bset.release(), con.release()));
+              }
             }
-          }
-          if (interval_bounds && (isl_set_n_dim(trial_set) == 2)) {
-            struct data_poly data = {0,         1,     dims,    products_size,
-                                     transpose, limit, hmatrix, ls};
-            isl_vertices *verts = isl_basic_set_compute_vertices(Domain_.get());
-            isl_vertices_foreach_vertex(verts, vertex_count_interval, &data);
-            isl_vertices_free(verts);
-            isl_vertices *verts2 =
-                isl_basic_set_compute_vertices(Domain_.release());
-            struct data_poly data2 = {1,         0,     dims,    products_size,
-                                      transpose, limit, hmatrix, ls};
-            isl_vertices_foreach_vertex(verts2, vertex_count_interval, &data2);
-            isl_vertices_free(verts2);
-            for (auto con : constraint_list) {
-              init_bset = isl::manage(isl_basic_set_add_constraint(
-                  init_bset.release(), con.release()));
-            }
-          }
-          if (!interval_bounds && (isl_set_n_dim(trial_set) == 3)) {
-            struct data_poly data = {0,         1,     dims,    products_size,
-                                     transpose, limit, hmatrix, ls};
-            isl_vertices *verts = isl_basic_set_compute_vertices(Domain_.get());
-            isl_vertices_foreach_vertex(verts, vertex_count, &data);
-            isl_vertices_free(verts);
-            isl_vertices *verts2 =
-                isl_basic_set_compute_vertices(Domain_.get());
-            struct data_poly data2 = {1,         2,     dims,    products_size,
-                                      transpose, limit, hmatrix, ls};
-            isl_vertices_foreach_vertex(verts2, vertex_count, &data2);
-            isl_vertices_free(verts2);
-            isl_vertices *verts3 =
-                isl_basic_set_compute_vertices(Domain_.release());
-            struct data_poly data3 = {2,         0,     dims,    products_size,
-                                      transpose, limit, hmatrix, ls};
-            isl_vertices_foreach_vertex(verts3, vertex_count, &data3);
-            isl_vertices_free(verts3);
-            for (auto con : constraint_list) {
-              init_bset = isl::manage(isl_basic_set_add_constraint(
-                  init_bset.release(), con.release()));
-            }
-          }
-          if (interval_bounds && (isl_set_n_dim(trial_set) == 3)) {
-            struct data_poly data = {0,         1,     dims,    products_size,
-                                     transpose, limit, hmatrix, ls};
-            isl_vertices *verts = isl_basic_set_compute_vertices(Domain_.get());
-            isl_vertices_foreach_vertex(verts, vertex_count_interval, &data);
-            isl_vertices_free(verts);
-            isl_vertices *verts2 =
-                isl_basic_set_compute_vertices(Domain_.get());
-            struct data_poly data2 = {1,         2,     dims,    products_size,
-                                      transpose, limit, hmatrix, ls};
-            isl_vertices_foreach_vertex(verts2, vertex_count_interval, &data2);
-            isl_vertices_free(verts2);
-            isl_vertices *verts3 =
-                isl_basic_set_compute_vertices(Domain_.release());
-            struct data_poly data3 = {2,         0,     dims,    products_size,
-                                      transpose, limit, hmatrix, ls};
-            isl_vertices_foreach_vertex(verts3, vertex_count_interval, &data3);
-            isl_vertices_free(verts3);
-            for (auto con : constraint_list) {
-              init_bset = isl::manage(isl_basic_set_add_constraint(
-                  init_bset.release(), con.release()));
+          } else { // octagon
+            if (isl_set_n_dim(trial_set) == 2) {
+              struct data_poly data = {0,         1,     dims,    products_size,
+                                       transpose, limit, hmatrix, ls};
+              isl_vertices *verts =
+                  isl_basic_set_compute_vertices(Domain_.release());
+              isl_vertices_foreach_vertex(verts, vertex_count, &data);
+              isl_vertices_free(verts);
+              for (auto con : constraint_list) {
+                init_bset = isl::manage(isl_basic_set_add_constraint(
+                    init_bset.release(), con.release()));
+              }
+            } else if (isl_set_n_dim(trial_set) == 3) {
+              struct data_poly data = {0,         1,     dims,    products_size,
+                                       transpose, limit, hmatrix, ls};
+              isl_vertices *verts =
+                  isl_basic_set_compute_vertices(Domain_.get());
+              isl_vertices_foreach_vertex(verts, vertex_count, &data);
+              isl_vertices_free(verts);
+              isl_vertices *verts2 =
+                  isl_basic_set_compute_vertices(Domain_.get());
+              struct data_poly data2 = {1,         2,     dims,    products_size,
+                                        transpose, limit, hmatrix, ls};
+              isl_vertices_foreach_vertex(verts2, vertex_count, &data2);
+              isl_vertices_free(verts2);
+              isl_vertices *verts3 =
+                  isl_basic_set_compute_vertices(Domain_.release());
+              struct data_poly data3 = {2,         0,     dims,    products_size,
+                                        transpose, limit, hmatrix, ls};
+              isl_vertices_foreach_vertex(verts3, vertex_count, &data3);
+              isl_vertices_free(verts3);
+              for (auto con : constraint_list) {
+                init_bset = isl::manage(isl_basic_set_add_constraint(
+                    init_bset.release(), con.release()));
+              }
             }
           }
 
@@ -1051,305 +963,55 @@ isl::pw_aff BullsEye::extractAffineExpression(piece Piece) {
   return Sum;
 }
 
-// Naive implementation of setting the coefficients in the matrix
+// Hardcoded bitmask -> Handelman-matrix row mapping. These are exactly the
+// values the original 300-line if/else cascade used, now expressed once as a
+// data structure. Bitmask strings of different lengths (sizes 1, 2, 3 and 6)
+// never collide, so a single table is unambiguous.
+// NOTE: the original size-6 table contained a typo -- the 7-character key
+// "0100100" could never match a 6-character bitmask, so row 14 was never set.
+// It is corrected here to "010010".
+const std::map<std::string, int> &BullsEye::handelmanRowTable() {
+  static const std::map<std::string, int> Table = {
+      // size 1
+      {"0", 0}, {"1", 1}, {"2", 2},
+      // size 2
+      {"00", 0}, {"10", 1}, {"01", 2}, {"11", 3}, {"20", 4}, {"02", 5},
+      // size 3
+      {"000", 0}, {"100", 1}, {"010", 2}, {"001", 3}, {"110", 4}, {"101", 5},
+      {"011", 6}, {"200", 7}, {"020", 8}, {"002", 9},
+      // size 6
+      {"000000", 0},  {"100000", 1},  {"010000", 2},  {"001000", 3},
+      {"000100", 4},  {"000010", 5},  {"000001", 6},  {"110000", 7},
+      {"101000", 8},  {"100100", 9},  {"100010", 10}, {"100001", 11},
+      {"011000", 12}, {"010100", 13}, {"010010", 14}, {"010001", 15},
+      {"001100", 16}, {"001010", 17}, {"001001", 18}, {"000110", 19},
+      {"000101", 20}, {"000011", 21}, {"200000", 22}, {"020000", 23},
+      {"002000", 24}, {"000200", 25}, {"000020", 26}, {"000002", 27},
+      {"111000", 28}, {"110100", 29}, {"110010", 30}, {"110001", 31},
+      {"101100", 32}, {"101010", 33}, {"101001", 34}, {"100110", 35},
+      {"100101", 36}, {"100011", 37}, {"210000", 38}, {"201000", 39},
+      {"200100", 40}, {"200010", 41}, {"200001", 42}, {"120000", 43},
+      {"021000", 44}, {"020100", 45}, {"020010", 46}, {"020001", 47},
+      {"102000", 48}, {"012000", 49}, {"002100", 50}, {"002010", 51},
+      {"002001", 52}, {"100200", 53}, {"010200", 54}, {"001200", 55},
+      {"000210", 56}, {"000201", 57}, {"100020", 58}, {"010020", 59},
+      {"001020", 60}, {"000120", 61}, {"000021", 62}, {"100002", 63},
+      {"010002", 64}, {"001002", 65}, {"000102", 66}, {"000012", 67},
+      {"300000", 68}, {"030000", 69}, {"003000", 70}, {"000300", 71},
+      {"000030", 72}, {"000003", 73},
+  };
+  return Table;
+}
+
+// Set the coefficient in the Handelman matrix for the row identified by the
+// per-term exponent bitmask. Unknown bitmasks (sizes other than 1/2/3/6) are
+// ignored, matching the original behaviour.
 void BullsEye::setcolumn(std::string bmask, int column, long long coeff,
                          std::vector<std::vector<long>> &hm) {
-
-  int row = 0;
-  // For Size 2
-  if (bmask.size() == 2) {
-
-    if (bmask.compare("00") == 0) {
-      row = 0;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("10") == 0) {
-      row = 1;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("01") == 0) {
-      row = 2;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("11") == 0) {
-      row = 3;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("20") == 0) {
-      row = 4;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("02") == 0) {
-      row = 5;
-      hm[row][column] = coeff;
-    }
-    // For Size 1
-  } else if (bmask.size() == 1) {
-    if (bmask.compare("0") == 0) {
-      row = 0;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("1") == 0) {
-      row = 1;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("2") == 0) {
-      row = 2;
-      hm[row][column] = coeff;
-    }
-    // For Size 3
-  } else if (bmask.size() == 3) {
-
-    if (bmask.compare("000") == 0) {
-      row = 0;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("100") == 0) {
-      row = 1;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("010") == 0) {
-      row = 2;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("001") == 0) {
-      row = 3;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("110") == 0) {
-      row = 4;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("101") == 0) {
-      row = 5;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("011") == 0) {
-      row = 6;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("200") == 0) {
-      row = 7;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("020") == 0) {
-      row = 8;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("002") == 0) {
-      row = 9;
-      hm[row][column] = coeff;
-    }
-    // For Size 6
-  } else if (bmask.size() == 6) {
-
-    if (bmask.compare("000000") == 0) {
-      row = 0;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("100000") == 0) {
-      row = 1;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("010000") == 0) {
-      row = 2;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("001000") == 0) {
-      row = 3;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("000100") == 0) {
-      row = 4;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("000010") == 0) {
-      row = 5;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("000001") == 0) {
-      row = 6;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("110000") == 0) {
-      row = 7;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("101000") == 0) {
-      row = 8;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("100100") == 0) {
-      row = 9;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("100010") == 0) {
-      row = 10;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("100001") == 0) {
-      row = 11;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("011000") == 0) {
-      row = 12;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("010100") == 0) {
-      row = 13;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("0100100") == 0) {
-      row = 14;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("010001") == 0) {
-      row = 15;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("001100") == 0) {
-      row = 16;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("001010") == 0) {
-      row = 17;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("001001") == 0) {
-      row = 18;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("000110") == 0) {
-      row = 19;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("000101") == 0) {
-      row = 20;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("000011") == 0) {
-      row = 21;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("200000") == 0) {
-      row = 22;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("020000") == 0) {
-      row = 23;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("002000") == 0) {
-      row = 24;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("000200") == 0) {
-      row = 25;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("000020") == 0) {
-      row = 26;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("000002") == 0) {
-      row = 27;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("111000") == 0) {
-      row = 28;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("110100") == 0) {
-      row = 29;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("110010") == 0) {
-      row = 30;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("110001") == 0) {
-      row = 31;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("101100") == 0) {
-      row = 32;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("101010") == 0) {
-      row = 33;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("101001") == 0) {
-      row = 34;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("100110") == 0) {
-      row = 35;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("100101") == 0) {
-      row = 36;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("100011") == 0) {
-      row = 37;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("210000") == 0) {
-      row = 38;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("201000") == 0) {
-      row = 39;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("200100") == 0) {
-      row = 40;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("200010") == 0) {
-      row = 41;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("200001") == 0) {
-      row = 42;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("120000") == 0) {
-      row = 43;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("021000") == 0) {
-      row = 44;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("020100") == 0) {
-      row = 45;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("020010") == 0) {
-      row = 46;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("020001") == 0) {
-      row = 47;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("102000") == 0) {
-      row = 48;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("012000") == 0) {
-      row = 49;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("002100") == 0) {
-      row = 50;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("002010") == 0) {
-      row = 51;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("002001") == 0) {
-      row = 52;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("100200") == 0) {
-      row = 53;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("010200") == 0) {
-      row = 54;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("001200") == 0) {
-      row = 55;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("000210") == 0) {
-      row = 56;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("000201") == 0) {
-      row = 57;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("100020") == 0) {
-      row = 58;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("010020") == 0) {
-      row = 59;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("001020") == 0) {
-      row = 60;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("000120") == 0) {
-      row = 61;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("000021") == 0) {
-      row = 62;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("100002") == 0) {
-      row = 63;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("010002") == 0) {
-      row = 64;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("001002") == 0) {
-      row = 65;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("000102") == 0) {
-      row = 66;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("000012") == 0) {
-      row = 67;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("300000") == 0) {
-      row = 68;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("030000") == 0) {
-      row = 69;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("003000") == 0) {
-      row = 70;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("000300") == 0) {
-      row = 71;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("000030") == 0) {
-      row = 72;
-      hm[row][column] = coeff;
-    } else if (bmask.compare("000003") == 0) {
-      row = 73;
-      hm[row][column] = coeff;
-    }
+  const auto &Table = handelmanRowTable();
+  auto It = Table.find(bmask);
+  if (It != Table.end()) {
+    hm[It->second][column] = coeff;
   }
 }
 
@@ -1365,4 +1027,4 @@ std::vector<long> BullsEye::countAffineDimensions(piece Piece,
     Results[i] = isl::get_value(Variable.max());
   }
   return Results;
-}
+}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    

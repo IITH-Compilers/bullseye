@@ -35,7 +35,12 @@ struct machine_model {
 
 // struct defining the model options
 struct model_options {
-  bool ComputeBounds;
+  bool ComputeBounds = false;
+  // Sub-polyhedral approximation controls used by BullsEye. Defaults reproduce
+  // the original behaviour (span 25, Handelman-octagon on, interval off).
+  long SparseSpan = 25;            // span for sparse enumeration of non-affine polys
+  bool UseHandelmanOctagon = true; // Handelman-octagon LP approximation
+  bool UseInterval = false;        // interval (single-variable) LP approximation
 };
 
 // struct holding the term information

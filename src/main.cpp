@@ -56,8 +56,18 @@ ConvertToProgramParameters(po::variables_map Variables) {
   if (Variables.count("scop-function")) {
     PP.ScopFunction = Variables["scop-function"].as<std::string>();
   }
-  if (Variables.count("compute-counds")) {
+  if (Variables.count("compute-bounds")) {
     PP.ComputeBounds = Variables["compute-bounds"].as<bool>();
+  }
+  // BullsEye sub-polyhedral approximation options
+  if (Variables.count("sparse-span")) {
+    PP.SparseSpan = Variables["sparse-span"].as<long>();
+  }
+  if (Variables.count("handelman-octagon")) {
+    PP.UseHandelmanOctagon = Variables["handelman-octagon"].as<bool>();
+  }
+  if (Variables.count("interval-bounds")) {
+    PP.UseInterval = Variables["interval-bounds"].as<bool>();
   }
   return PP;
 }
@@ -85,7 +95,13 @@ int main(int argc, const char **args) {
         ("scop-function,s", po::value<std::string>(),
          "set the scop function scop") //
         ("compute-bounds,b", po::value<bool>()->default_value(false),
-         "compute stack distance bounds");
+         "compute stack distance bounds") //
+        ("sparse-span", po::value<long>()->default_value(25),
+         "span for sparse enumeration of non-affine polynomials (>=1; 1 = dense)") //
+        ("handelman-octagon", po::value<bool>()->default_value(true),
+         "enable Handelman-octagon LP sub-polyhedral approximation") //
+        ("interval-bounds", po::value<bool>()->default_value(false),
+         "enable interval (single-variable) LP sub-polyhedral approximation");
 
     // parse the program options
     po::variables_map Variables;
@@ -124,3 +140,4 @@ int main(int argc, const char **args) {
   }
   return 0;
 }
+

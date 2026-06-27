@@ -47,7 +47,11 @@ struct ProgramParameters {
   std::vector<std::string> IncludePath;
   std::vector<std::string> DefineParameters;
   std::string ScopFunction;
-  bool ComputeBounds; 
+  bool ComputeBounds;
+  // BullsEye sub-polyhedral approximation options (set from the CLI).
+  long SparseSpan = 25;
+  bool UseHandelmanOctagon = true;
+  bool UseInterval = false;
 
   ProgramParameters() = delete;
 
